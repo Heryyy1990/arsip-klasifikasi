@@ -13,16 +13,14 @@ st.set_page_config(
     layout="wide"
 )
 
-# ── Header ────────────────────────────────────────────────────
+# ── HEADER ─────────────────────────────────────────
 st.title("🗂️ Sistem Rekomendasi Klasifikasi Arsip")
-st.caption("Model Semantik (HuggingFace) + Validasi Arsiparis Digital (Google Gemini)")
+st.caption("Model Semantik + Validasi Arsiparis Digital (Gemini)")
 
-# ========================
-# LOAD DATA & MODEL
-# ========================
+# ── LOAD DATA ──────────────────────────────────────
 @st.cache_resource
 def load_semua():
-    # Baca CSV dengan aman (hindari error encoding & format)
+    # baca CSV aman
     try:
         df = pd.read_csv("data/klasifikasi.csv", encoding="utf-8")
     except:
@@ -32,43 +30,46 @@ def load_semua():
             on_bad_lines="skip"
         )
 
-    df.columns = df.columns.str.strip()
+    # bersihkan nama kolom
+    df.columns = df.columns.str.lower().str.strip()
 
+    # pastikan kolom ada
+    if "kode" not in df.columns or "uraian" not in df.columns:
+        st.error(f"Kolom harus 'kode' dan 'uraian'. Ditemukan: {list(df.columns)}")
+        st.stop()
+
+    # model semantic
     model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
     embeddings = model.encode(
-        df["uraian arsip"].astype(str).tolist(),
+        df["uraian"].astype(str).tolist(),
         show_progress_bar=False
     )
 
     return df, model, embeddings
 
-with st.spinner("⏳ Memuat model AI... (pertama kali ±1-2 menit)"):
+with st.spinner("⏳ Memuat model AI..."):
     df, model, embeddings = load_semua()
 
 st.success(f"✅ Siap — {len(df)} kode klasifikasi tersedia")
 st.divider()
 
-# ========================
-# INPUT USER
-# ========================
+# ── INPUT ──────────────────────────────────────────
 st.subheader("📝 Masukkan Uraian Arsip")
 
 uraian_input = st.text_area(
-    label="Uraian dokumen/arsip:",
-    placeholder="Contoh: Surat keputusan pengangkatan Pegawai Negeri Sipil...",
+    "Uraian arsip:",
+    placeholder="Contoh: Surat keputusan pengangkatan PNS...",
     height=130
 )
 
 proses = st.button("🔍 Klasifikasikan")
 
-# ========================
-# PROSES
-# ========================
+# ── PROSES ─────────────────────────────────────────
 if proses and uraian_input.strip():
 
-    # ── TAHAP 1: Semantic Search ─────────────────────
-    with st.spinner("🔎 Menganalisis makna arsip..."):
+    # ===== TAHAP 1 =====
+    with st.spinner("🔎 Analisis semantik..."):
         q_emb = model.encode([uraian_input])
         skor = cosine_similarity(q_emb, embeddings)[0]
 
@@ -77,13 +78,13 @@ if proses and uraian_input.strip():
         kandidat = [
             {
                 "kode": str(df.iloc[i]["kode"]),
-                "uraian": df.iloc[i]["uraian arsip"],
+                "uraian": df.iloc[i]["uraian"],
                 "skor": float(skor[i])
             }
             for i in top3_idx
         ]
 
-    st.subheader("📋 Tahap 1 — 3 Kandidat Kode")
+    st.subheader("📋 Tahap 1 — 3 Kandidat")
 
     medal = ["🥇", "🥈", "🥉"]
     cols = st.columns(3)
@@ -97,7 +98,7 @@ if proses and uraian_input.strip():
             )
             st.info(k["uraian"])
 
-    # ── TAHAP 2: Gemini ─────────────────────
+    # ===== TAHAP 2 =====
     st.divider()
     st.subheader("🤖 Tahap 2 — Validasi Gemini")
 
@@ -129,6 +130,10 @@ Gunakan langkah:
 4. Pilih paling spesifik
 5. Perhatikan konteks unit kerja
 
+HINDARI:
+- hanya kata kunci
+- hanya judul
+
 Jawab hanya JSON:
 {{
 "kode_terpilih": "...",
@@ -137,7 +142,7 @@ Jawab hanya JSON:
 }}
 """
 
-        with st.spinner("🧠 Gemini sedang menganalisis..."):
+        with st.spinner("🧠 Gemini menganalisis..."):
             try:
                 model_gemini = genai.GenerativeModel("gemini-1.5-flash")
                 response = model_gemini.generate_content(prompt)
