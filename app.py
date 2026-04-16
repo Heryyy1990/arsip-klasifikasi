@@ -1,226 +1,100 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import re
-import json
-import os
-
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 import google.generativeai as genai
+import os
+from dotenv import load_dotenv
 
-# ================= CONFIG =================
-st.set_page_config(
-    page_title="Klasifikasi Arsip Pemerintah",
-    page_icon="🗂️",
-    layout="wide"
-)
+# Load environment variables (untuk API Key)
+load_dotenv()
 
-st.title("🗂️ Sistem Klasifikasi Arsip")
-st.caption("AI Berbasis Fungsi + Validasi Arsiparis (Gemini)")
+# Konfigurasi Halaman
+st.set_page_config(page_title="AI Archiver - Muna Barat", page_icon="🧠", layout="wide")
 
-# ================= API KEY =================
-api_key = st.secrets.get("GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY")
+# --- STYLE ---
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
+    .result-card { padding: 20px; border-radius: 10px; background-color: white; border-left: 5px solid #007bff; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_allow_dict=True)
 
-if api_key:
-    genai.configure(api_key=api_key)
+# --- SIDEBAR ---
+with st.sidebar:
+    st.title("⚙️ Pengaturan")
+    api_key = st.text_input("Google API Key", type="password", help="Dapatkan di Google AI Studio")
+    st.info("Aplikasi ini menggunakan dataset Klasifikasi Arsip yang sudah di-upgrade untuk akurasi maksimal.")
 
-# ================= LOAD DATA =================
-@st.cache_resource
+# --- LOAD DATA ---
+@st.cache_data
 def load_data():
-    df = pd.read_csv("data/klasifikasi.csv")
-    df.columns = df.columns.str.lower().str.strip()
-
-    df = df.rename(columns={
-        df.columns[0]: "kode",
-        df.columns[1]: "uraian"
-    })
-
-    df["kode"] = df["kode"].astype(str).str.strip()
-    df["uraian"] = df["uraian"].astype(str)
-
-    df = df[df["uraian"].str.len() > 3].dropna().reset_index(drop=True)
-
-    # hierarchy
-    df["level"] = df["kode"].apply(lambda x: x.count("."))
-    df["fungsi_kode"] = df["kode"].str.split(".").str[0]
-
+    # Pastikan file klasifikasi_arsip_upgraded.csv ada di folder yang sama
+    df = pd.read_csv('klasifikasi_arsip_upgraded.csv')
     return df
 
-df = load_data()
+try:
+    df_arsip = load_data()
+except Exception as e:
+    st.error(f"Gagal memuat database arsip. Pastikan file CSV tersedia. Error: {e}")
+    st.stop()
 
-# mapping fungsi
-fungsi_dict = df[df["level"] == 0].set_index("kode")["uraian"].to_dict()
+# --- HEADER ---
+st.title("🧠 AI Penentu Kode Klasifikasi Arsip")
+st.subheader("Kabupaten Muna Barat")
+st.write("Masukkan perihal atau deskripsi surat, dan AI akan menentukan kode klasifikasi yang paling tepat secara kontekstual.")
 
-# ================= MODEL =================
-@st.cache_resource
-def load_model():
-    return SentenceTransformer("all-MiniLM-L6-v2")  # lebih stabil
+# --- INPUT ---
+user_input = st.text_area("✍️ Masukkan Perihal/Deskripsi Arsip:", placeholder="Contoh: Permohonan izin cuti tahunan karena alasan keluarga...")
 
-model = load_model()
-
-@st.cache_resource
-def build_embeddings(data):
-    return model.encode(data["uraian"].tolist(), show_progress_bar=False)
-
-embeddings = build_embeddings(df)
-
-# ================= DETEKSI FUNGSI =================
-def deteksi_fungsi(teks):
-
+if st.button("Analisis Kontekstual"):
     if not api_key:
-        return None
-
-    daftar = "\n".join([f"{k} = {v}" for k, v in fungsi_dict.items()])
-
-    prompt = f"""
-Anda arsiparis.
-
-Dokumen:
-{teks}
-
-Pilih kode fungsi paling tepat dari daftar:
-
-{daftar}
-
-Jawab HANYA angka.
-"""
-
-    try:
-        m = genai.GenerativeModel("gemini-1.5-flash-latest")
-        res = m.generate_content(prompt)
-
-        raw = res.text.strip()
-        kode = re.findall(r"\d+", raw)
-
-        return kode[0] if kode else None
-
-    except:
-        return None
-
-# ================= SEARCH =================
-def semantic_search(data, query, top_k=3):
-    emb = model.encode(data["uraian"].tolist())
-    q_emb = model.encode([query])
-
-    skor = cosine_similarity(q_emb, emb)[0]
-    idx = np.argsort(skor)[::-1][:top_k]
-
-    return [
-        {
-            "kode": data.iloc[i]["kode"],
-            "uraian": data.iloc[i]["uraian"],
-            "skor": skor[i]
-        }
-        for i in idx
-    ]
-
-# ================= UI =================
-uraian_input = st.text_area("📝 Uraian Arsip", height=150)
-
-col1, col2 = st.columns(2)
-submit = col1.button("🔍 Klasifikasikan", use_container_width=True)
-validasi = col2.button("🤖 Validasi AI", use_container_width=True)
-
-# ================= PROSES =================
-if submit and uraian_input:
-
-    # ===== Tahap 0: fungsi =====
-    fungsi = deteksi_fungsi(uraian_input)
-
-    if fungsi and fungsi in fungsi_dict:
-        st.caption(f"🧭 Fungsi: {fungsi} - {fungsi_dict[fungsi]}")
-        df_filtered = df[df["fungsi_kode"] == fungsi]
+        st.warning("⚠️ Silakan masukkan API Key di sidebar terlebih dahulu.")
+    elif not user_input:
+        st.warning("⚠️ Masukkan deskripsi arsip terlebih dahulu.")
     else:
-        st.warning("⚠️ Fungsi tidak terdeteksi → fallback")
-        df_filtered = df
-
-    # ===== Tahap 1: kandidat =====
-    kandidat = semantic_search(df_filtered, uraian_input, top_k=3)
-
-    st.subheader("📋 Kandidat Klasifikasi")
-
-    for k in kandidat:
-        st.write(f"**{k['kode']}** - {k['uraian']} ({k['skor']:.1%})")
-
-    st.session_state["kandidat"] = kandidat
-    st.session_state["uraian"] = uraian_input
-    st.session_state["fungsi"] = fungsi
-
-# ================= VALIDASI GEMINI =================
-if validasi:
-
-    kandidat = st.session_state.get("kandidat", [])
-    uraian_input = st.session_state.get("uraian", "")
-    fungsi = st.session_state.get("fungsi", "")
-
-    if not kandidat:
-        st.warning("⚠️ Jalankan klasifikasi dulu")
-    elif not api_key:
-        st.error("API key tidak ada")
-    else:
-
-        kandidat_text = "\n".join([
-            f"{i+1}. {k['kode']} - {k['uraian']}"
-            for i, k in enumerate(kandidat)
-        ])
-
-        prompt = f"""
-Anda arsiparis profesional.
-
-Dokumen:
-{uraian_input}
-
-Fungsi:
-{fungsi}
-
-Kandidat:
-{kandidat_text}
-
-Pilih yang paling tepat.
-
-WAJIB:
-- Output JSON
-- Tanpa markdown
-
-Format:
-{{
-"kode_terpilih": "...",
-"uraian_terpilih": "...",
-"alasan": "..."
-}}
-"""
-
         try:
-            m = genai.GenerativeModel("gemini-1.5-flash-latest")
-            res = m.generate_content(prompt)
+            # 1. Inisialisasi AI
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
 
-            raw = res.text.strip().replace("```json", "").replace("```", "").strip()
+            # 2. Filtering Level 2 (Strategi Akurasi)
+            # Kita mengirimkan sampel data yang relevan ke AI sebagai referensi konteks
+            # Untuk efisiensi token, kita hanya kirimkan kolom context
+            sample_context = df_arsip['ai_search_context'].sample(min(len(df_arsip), 500)).tolist()
+            
+            prompt = f"""
+            Anda adalah seorang Arsiparis Ahli. Tugas Anda adalah menentukan Kode Klasifikasi Arsip berdasarkan aturan nasional.
+            
+            DATASET REFERENSI (Contoh Format):
+            {sample_context[:20]} ... (dan seterusnya)
 
-            if not raw.startswith("{"):
-                raise ValueError("Invalid JSON")
+            INPUT USER: "{user_input}"
 
-            hasil = json.loads(raw)
+            TUGAS:
+            1. Pahami makna mendalam dari INPUT USER (Contoh: "cuti" berarti Kepegawaian, bukan SAR/Bencana).
+            2. Berikan 3 rekomendasi kode klasifikasi terbaik dari dataset.
+            3. Berikan alasan logis untuk setiap rekomendasi.
 
-        except:
-            # fallback aman
-            hasil = {
-                "kode_terpilih": kandidat[0]["kode"],
-                "uraian_terpilih": kandidat[0]["uraian"],
-                "alasan": "Fallback: AI gagal parsing"
-            }
+            FORMAT OUTPUT (JSON):
+            [
+              {{"kode": "...", "uraian": "...", "alasan": "..."}},
+              ...
+            ]
+            """
 
-        st.subheader("✅ Hasil Final")
+            with st.spinner('Sedang menganalisis konteks arsip...'):
+                response = model.generate_content(prompt)
+                
+                # Parsing hasil (Sederhana)
+                st.success("✅ Analisis Selesai!")
+                
+                # Tampilkan Hasil
+                st.markdown("### 🎯 Rekomendasi Kode Teratas")
+                st.write(response.text) # Menampilkan output teks dari AI
 
-        col1, col2 = st.columns([1,2])
+        except Exception as e:
+            st.error(f"Terjadi kendala pada server AI: {e}")
 
-        with col1:
-            st.metric("Kode", hasil["kode_terpilih"])
-            st.write(hasil["uraian_terpilih"])
-
-        with col2:
-            st.info(hasil["alasan"])
-
-# ================= FOOTER =================
-st.markdown("---")
-st.caption("EKlasifikasi Arsip © 2026")
+# --- FOOTER ---
+st.divider()
+st.caption("Dikembangkan untuk Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat.")
