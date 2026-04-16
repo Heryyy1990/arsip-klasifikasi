@@ -7,39 +7,12 @@ import google.generativeai as genai
 import json
 import os
 
-# ================= UI CONFIG =================
-st.set_page_config(
-    page_title="EKlasifikasi Arsip",
-    page_icon="📁",
-    layout="centered"
-)
+st.set_page_config(page_title="EKlasifikasi Arsip", page_icon="📁", layout="centered")
 
-# ================= STYLE =================
-st.markdown("""
-<style>
-body {
-    background-color: #0e1117;
-}
-.block-container {
-    padding-top: 2rem;
-}
-.title {
-    font-size: 32px;
-    font-weight: bold;
-}
-.subtitle {
-    color: #9aa0a6;
-}
-</style>
-""", unsafe_allow_html=True)
+st.title("📁 EKlasifikasi Arsip")
+st.caption("AI Klasifikasi Arsip (Hybrid: Cepat + Pintar + Belajar)")
 
-# ================= HEADER =================
-st.markdown('<div class="title">📁 EKlasifikasi Arsip</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">AI Klasifikasi Arsip (Hybrid: Cepat + Pintar)</div>', unsafe_allow_html=True)
-
-st.write("")
-
-# ================= LOAD MODEL =================
+# ================= LOAD DATA =================
 @st.cache_resource
 def load_data():
     try:
@@ -47,58 +20,95 @@ def load_data():
     except:
         df = pd.read_csv("data/klasifikasi.csv", encoding="latin-1", on_bad_lines="skip")
 
-    df.columns = (
-        df.columns
-        .str.lower()
-        .str.strip()
-        .str.replace(";", "", regex=False)
-    )
+    df.columns = df.columns.str.lower().str.strip().str.replace(";", "", regex=False)
 
     df = df.rename(columns={
         df.columns[0]: "kode",
         df.columns[1]: "uraian"
     })
 
-    model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    df["uraian"] = df["uraian"].astype(str)
+    df = df[df["uraian"].str.len() > 3].dropna().reset_index(drop=True)
 
-    embeddings = model.encode(df["uraian"].astype(str).tolist())
+    model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    embeddings = model.encode(df["uraian"].tolist(), batch_size=32, show_progress_bar=False)
 
     return df, model, embeddings
 
+# ================= LOAD FEEDBACK =================
+def load_feedback():
+    if os.path.exists("data/feedback.csv"):
+        return pd.read_csv("data/feedback.csv")
+    else:
+        return pd.DataFrame(columns=["uraian", "kode"])
+
+def save_feedback(uraian, kode):
+    df_fb = load_feedback()
+    df_fb = pd.concat([df_fb, pd.DataFrame([{"uraian": uraian, "kode": kode}])])
+    df_fb.to_csv("data/feedback.csv", index=False)
+
+# ================= INIT =================
 df, model, embeddings = load_data()
+feedback_df = load_feedback()
 
-# ================= FORM (ENTER LANGSUNG SUBMIT) =================
-with st.form("form_arsip", clear_on_submit=False):
+st.success(f"✅ {len(df)} data siap | {len(feedback_df)} pembelajaran tersimpan")
+
+# ================= FORM =================
+with st.form("form"):
     uraian_input = st.text_input("🔎 Masukkan uraian arsip:")
-
     col1, col2 = st.columns(2)
-
-    submit = col1.form_submit_button("🚀 Cari Klasifikasi Cepat")
-    validasi = col2.form_submit_button("🤖 Validasi AI (Hemat quota)")
+    submit = col1.form_submit_button("🚀 Cari Cepat")
+    validasi = col2.form_submit_button("🤖 Validasi AI")
 
 # ================= TAHAP 1 =================
 if submit and uraian_input:
 
+    # 🔥 PRIORITAS FEEDBACK (INI KUNCINYA)
+    if not feedback_df.empty:
+        cocok = feedback_df[feedback_df["uraian"].str.lower() == uraian_input.lower()]
+        if not cocok.empty:
+            kode_fb = cocok.iloc[-1]["kode"]
+            uraian_fb = df[df["kode"] == kode_fb]["uraian"].values
+
+            st.success("🎯 Ditemukan dari pembelajaran sebelumnya!")
+            st.write(f"**{kode_fb}** - {uraian_fb[0] if len(uraian_fb) else ''}")
+            st.stop()
+
+    # semantic search
     q_emb = model.encode([uraian_input])
     skor = cosine_similarity(q_emb, embeddings)[0]
 
-    top_idx = np.argsort(skor)[::-1][:3]
+    idx = np.argsort(skor)[::-1][:3]
 
     kandidat = [
         {
-            "kode": str(df.iloc[i]["kode"]),
+            "kode": df.iloc[i]["kode"],
             "uraian": df.iloc[i]["uraian"],
             "skor": skor[i]
         }
-        for i in top_idx
+        for i in idx
     ]
 
-    st.write("### 📋 Hasil Cepat (Tanpa AI)")
+    st.write("### 📋 Rekomendasi")
     for k in kandidat:
         st.write(f"**{k['kode']}** - {k['uraian']} ({k['skor']:.1%})")
 
     st.session_state["kandidat"] = kandidat
     st.session_state["uraian"] = uraian_input
+
+# ================= PILIH MANUAL =================
+if "kandidat" in st.session_state:
+
+    st.write("### ✍️ Pilih Kode yang Benar (Melatih AI)")
+
+    opsi = [f"{k['kode']} - {k['uraian']}" for k in st.session_state["kandidat"]]
+
+    pilihan = st.selectbox("Pilih hasil yang paling tepat:", opsi)
+
+    if st.button("💾 Simpan Pembelajaran"):
+        kode_terpilih = pilihan.split(" - ")[0]
+        save_feedback(st.session_state["uraian"], kode_terpilih)
+        st.success("✅ Pembelajaran disimpan!")
 
 # ================= TAHAP 2 =================
 if validasi:
@@ -107,12 +117,12 @@ if validasi:
     uraian_input = st.session_state.get("uraian", "")
 
     if not kandidat:
-        st.warning("⚠️ Jalankan pencarian cepat dulu")
+        st.warning("⚠️ Jalankan pencarian dulu")
     else:
         api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", "")
 
         if not api_key:
-            st.error("API Key tidak ditemukan")
+            st.error("API key tidak ada")
         else:
             genai.configure(api_key=api_key)
 
@@ -141,13 +151,10 @@ Jawab JSON:
 """
 
             try:
-                # 🔥 MODEL YANG PASTI ADA
                 model_gemini = genai.GenerativeModel("gemini-1.5-pro")
-                response = model_gemini.generate_content(prompt)
+                res = model_gemini.generate_content(prompt)
 
-                raw = response.text.strip()
-                raw = raw.replace("```json", "").replace("```", "")
-
+                raw = res.text.strip().replace("```json", "").replace("```", "")
                 hasil = json.loads(raw)
 
                 st.write("### 🤖 Hasil AI")
@@ -155,8 +162,8 @@ Jawab JSON:
                 st.info(hasil["alasan"])
 
             except Exception as e:
-                st.error(f"Terjadi error: {str(e)}")
+                st.error(f"Error: {str(e)}")
 
 # ================= FOOTER =================
 st.markdown("---")
-st.caption("EKlasifikasi Arsip by Heryanto S.Pd © 2026 | Powered by Gemini AI")
+st.caption("EKlasifikasi Arsip © 2026 | AI Belajar dari Anda")
