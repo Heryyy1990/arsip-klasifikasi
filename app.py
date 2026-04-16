@@ -2,77 +2,138 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 
-# Konfigurasi Halaman
-st.set_page_config(page_title="AI Archiver - Muna Barat", page_icon="🧠", layout="wide")
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(
+    page_title="AI Archiver - Muna Barat",
+    page_icon="🧠",
+    layout="wide"
+)
 
-# --- STYLE ---
+# --- STYLE CSS (Custom Tampilan) ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
-    .result-card { padding: 20px; border-radius: 10px; background-color: white; border-left: 5px solid #007bff; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .main { background-color: #f8f9fa; }
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 8px; 
+        height: 3.5em; 
+        background-color: #1a73e8; 
+        color: white; 
+        font-weight: bold;
+        border: none;
+    }
+    .stButton>button:hover { background-color: #1557b0; color: white; }
+    .result-card { 
+        padding: 20px; 
+        border-radius: 10px; 
+        background-color: white; 
+        border-left: 6px solid #1a73e8; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOAD DATA ---
+# --- LOAD DATASET ---
 @st.cache_data
 def load_data():
-    # Pastikan file ini ada di repo GitHub kamu
-    df = pd.read_csv('klasifikasi_arsip.csv')
-    return df
+    try:
+        # Menggunakan file hasil upgrade dari Colab/Script sebelumnya
+        df = pd.read_csv('klasifikasi_arsip_upgraded.csv')
+        return df
+    except FileNotFoundError:
+        return None
 
-try:
-    df_arsip = load_data()
-except Exception as e:
-    st.error(f"Gagal memuat database arsip. Pastikan file CSV tersedia. Error: {e}")
-    st.stop()
+df_arsip = load_data()
 
-# --- AMBIL API KEY DARI STREAMLIT SECRETS ---
-# AI akan mencari kunci bernama 'GEMINI_API_KEY' di setting Streamlit Cloud
-try:
-    api_key = st.secrets["GEMINI_API_KEY"]
-    genai.configure(api_key=api_key)
-except Exception as e:
-    st.error("⚠️ API Key tidak ditemukan di Secrets Streamlit. Silakan atur di 'Settings' -> 'Secrets'.")
-    st.stop()
+# --- KONFIGURASI GOOGLE AI (GEMINI) ---
+def init_gemini():
+    try:
+        # Mengambil API Key dari Streamlit Secrets
+        api_key = st.secrets["GEMINI_API_KEY"]
+        genai.configure(api_key=api_key)
+        return True
+    except Exception:
+        st.error("❌ API Key tidak ditemukan! Masukkan 'GEMINI_API_KEY' di menu Settings > Secrets pada dashboard Streamlit Cloud.")
+        return False
 
-# --- HEADER ---
-st.title("🧠 AI Penentu Kode Klasifikasi Arsip")
-st.subheader("Kabupaten Muna Barat")
+# --- LOGIKA ANALISIS ---
+def analyze_context(user_text, dataset):
+    # Mengambil sampel context untuk membantu AI (30-50 baris pertama sebagai panduan struktur)
+    references = dataset['ai_search_context'].head(50).tolist()
+    
+    # Model name 'gemini-1.5-flash' adalah yang terbaru dan paling stabil
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    prompt = f"""
+    Anda adalah pakar Arsiparis Pemerintah Indonesia.
+    Gunakan referensi struktur berikut untuk memahami pola pengkodean:
+    {references}
 
-# --- INPUT ---
-user_input = st.text_area("✍️ Masukkan Perihal/Deskripsi Arsip:", placeholder="Contoh: Permohonan izin cuti tahunan...")
+    TUGAS:
+    Tentukan 3 Kode Klasifikasi yang paling tepat untuk perihal surat berikut ini:
+    "{user_text}"
 
-if st.button("Analisis Kontekstual"):
-    if not user_input:
-        st.warning("⚠️ Masukkan deskripsi arsip terlebih dahulu.")
-    else:
-        try:
-            # Gunakan penamaan model yang lebih stabil
-            model = genai.GenerativeModel('gemini-1.5-flash')
+    ATURAN:
+    1. Jika input berkaitan dengan SDM/Pegawai/Cuti, WAJIB arahkan ke rumpun kode 800.
+    2. Jika berkaitan dengan Anggaran/Keuangan, arahkan ke rumpun 900.
+    3. Analisis secara mendalam (kontekstual), jangan hanya terpaku pada satu kata.
+    
+    FORMAT JAWABAN (Gunakan Markdown):
+    ### 🎯 Rekomendasi 1: [KODE] - [URAIAN]
+    **Alasan:** [Jelaskan alasan pemilihan secara logis]
 
-            # Ambil data referensi (maksimalkan konteks)
-            sample_context = df_arsip['ai_search_context'].head(1000).tolist()
-            
-            prompt = f"""
-            Anda adalah Arsiparis Ahli. Berdasarkan dataset berikut:
-            {sample_context[:50]} ...
+    ### 🥈 Rekomendasi 2: [KODE] - [URAIAN]
+    **Alasan:** ...
+    """
+    
+    response = model.generate_content(prompt)
+    return response.text
 
-            Tentukan 3 rekomendasi kode klasifikasi untuk: "{user_input}"
-            
-            Berikan jawaban dalam format:
-            1. KODE - URAIAN
-               Alasan: ...
-            """
+# --- TAMPILAN UTAMA ---
+def main():
+    st.title("🧠 AI Penentu Kode Klasifikasi Arsip")
+    st.markdown("##### Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
+    st.divider()
 
-            with st.spinner('Menganalisis...'):
-                response = model.generate_content(prompt)
-                st.success("✅ Analisis Selesai!")
-                st.markdown(response.text)
+    if df_arsip is None:
+        st.error("⚠️ File `klasifikasi_arsip_upgraded.csv` tidak ditemukan di repository GitHub kamu.")
+        return
 
-        except Exception as e:
-            st.error(f"Terjadi kendala teknis: {e}. Pastikan API Key benar dan library terbaru.")
+    # Layout kolom untuk input
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        user_input = st.text_area(
+            "✍️ Masukkan Perihal atau Deskripsi Singkat Arsip:",
+            placeholder="Contoh: Permohonan cuti tahunan karena ada urusan keluarga di luar kota...",
+            height=150
+        )
+        
+        btn_klik = st.button("Mulai Analisis Kontekstual")
 
-# --- FOOTER ---
-st.divider()
-st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat.")
+    with col2:
+        st.info("""
+        **Cara Kerja AI:**
+        1. Membaca deskripsi surat Anda.
+        2. Mencari pola di database klasifikasi.
+        3. Menentukan kode yang paling logis berdasarkan aturan kearsipan.
+        """)
+
+    if btn_klik:
+        if not user_input:
+            st.warning("Silakan masukkan deskripsi arsip terlebih dahulu.")
+        else:
+            if init_gemini():
+                with st.spinner('AI sedang berpikir dan menganalisis kode...'):
+                    try:
+                        hasil = analyze_context(user_input, df_arsip)
+                        st.success("✅ Analisis Berhasil!")
+                        st.markdown(f'<div class="result-card">{hasil}</div>', unsafe_allow_html=True)
+                    except Exception as e:
+                        # Fallback jika model name bermasalah di versi tertentu
+                        st.error(f"Terjadi kendala: {e}")
+                        st.info("Saran: Pastikan file `requirements.txt` sudah berisi `google-generativeai>=0.5.0`.")
+
+if __name__ == "__main__":
+    main()
