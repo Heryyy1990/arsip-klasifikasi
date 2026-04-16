@@ -29,7 +29,7 @@ with st.sidebar:
 @st.cache_data
 def load_data():
     # Pastikan file ini sudah ada di repo GitHub kamu
-    df = pd.read_csv('klasifikasi_arsip_upgraded.csv')
+    df = pd.read_csv('klasifikasi_arsip.csv')
     return df
 
 try:
