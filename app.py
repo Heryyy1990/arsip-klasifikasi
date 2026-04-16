@@ -13,30 +13,46 @@ st.set_page_config(
     layout="wide"
 )
 
-# ── HEADER ─────────────────────────────────────────
+# ── HEADER ─────────────────────────────
 st.title("🗂️ Sistem Rekomendasi Klasifikasi Arsip")
 st.caption("Model Semantik + Validasi Arsiparis Digital (Gemini)")
 
-# ── LOAD DATA ──────────────────────────────────────
+# ── LOAD DATA ─────────────────────────
 @st.cache_resource
 def load_semua():
-    # baca CSV aman
+    # baca CSV (aman dari error)
     try:
         df = pd.read_csv("data/klasifikasi.csv", encoding="utf-8")
     except:
-        df = pd.read_csv(
-            "data/klasifikasi.csv",
-            encoding="latin-1",
-            on_bad_lines="skip"
-        )
+        df = pd.read_csv("data/klasifikasi.csv", encoding="latin-1", on_bad_lines="skip")
 
-    # bersihkan nama kolom
-    df.columns = df.columns.str.lower().str.strip()
+    # 🔥 NORMALISASI KOLOM (INI KUNCI)
+    df.columns = (
+        df.columns
+        .str.lower()
+        .str.strip()
+        .str.replace(";", "", regex=False)
+    )
 
-    # pastikan kolom ada
-    if "kode" not in df.columns or "uraian" not in df.columns:
-        st.error(f"Kolom harus 'kode' dan 'uraian'. Ditemukan: {list(df.columns)}")
+    # ambil kolom secara fleksibel
+    kolom_kode = [c for c in df.columns if "kode" in c]
+    kolom_uraian = [c for c in df.columns if "uraian" in c]
+
+    if not kolom_kode or not kolom_uraian:
+        st.error(f"Kolom tidak ditemukan. Kolom tersedia: {list(df.columns)}")
         st.stop()
+
+    kolom_kode = kolom_kode[0]
+    kolom_uraian = kolom_uraian[0]
+
+    # buang data kosong
+    df = df[[kolom_kode, kolom_uraian]].dropna()
+
+    # rename standar
+    df = df.rename(columns={
+        kolom_kode: "kode",
+        kolom_uraian: "uraian"
+    })
 
     # model semantic
     model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
@@ -54,21 +70,18 @@ with st.spinner("⏳ Memuat model AI..."):
 st.success(f"✅ Siap — {len(df)} kode klasifikasi tersedia")
 st.divider()
 
-# ── INPUT ──────────────────────────────────────────
-st.subheader("📝 Masukkan Uraian Arsip")
-
+# ── INPUT ─────────────────────────────
 uraian_input = st.text_area(
-    "Uraian arsip:",
-    placeholder="Contoh: Surat keputusan pengangkatan PNS...",
+    "📝 Masukkan uraian arsip:",
     height=130
 )
 
 proses = st.button("🔍 Klasifikasikan")
 
-# ── PROSES ─────────────────────────────────────────
+# ── PROSES ────────────────────────────
 if proses and uraian_input.strip():
 
-    # ===== TAHAP 1 =====
+    # Tahap 1 — Semantic
     with st.spinner("🔎 Analisis semantik..."):
         q_emb = model.encode([uraian_input])
         skor = cosine_similarity(q_emb, embeddings)[0]
@@ -84,23 +97,13 @@ if proses and uraian_input.strip():
             for i in top3_idx
         ]
 
-    st.subheader("📋 Tahap 1 — 3 Kandidat")
+    st.subheader("📋 3 Kandidat Terbaik")
 
-    medal = ["🥇", "🥈", "🥉"]
-    cols = st.columns(3)
+    for k in kandidat:
+        st.write(f"**{k['kode']}** — {k['uraian']} ({k['skor']:.1%})")
 
-    for i, (col, k) in enumerate(zip(cols, kandidat)):
-        with col:
-            st.metric(
-                label=f"{medal[i]} Kandidat {i+1}",
-                value=k["kode"],
-                delta=f"{k['skor']:.1%}"
-            )
-            st.info(k["uraian"])
-
-    # ===== TAHAP 2 =====
-    st.divider()
-    st.subheader("🤖 Tahap 2 — Validasi Gemini")
+    # Tahap 2 — Gemini
+    st.subheader("🤖 Validasi AI")
 
     api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", "")
 
@@ -110,7 +113,7 @@ if proses and uraian_input.strip():
         genai.configure(api_key=api_key)
 
         kandidat_text = "\n".join([
-            f"{i+1}. Kode: {k['kode']} | Uraian: {k['uraian']}"
+            f"{i+1}. {k['kode']} - {k['uraian']}"
             for i, k in enumerate(kandidat)
         ])
 
@@ -118,7 +121,7 @@ if proses and uraian_input.strip():
 Anda adalah arsiparis profesional pemerintahan Indonesia.
 
 DOKUMEN:
-"{uraian_input}"
+{uraian_input}
 
 KANDIDAT:
 {kandidat_text}
@@ -130,10 +133,6 @@ Gunakan langkah:
 4. Pilih paling spesifik
 5. Perhatikan konteks unit kerja
 
-HINDARI:
-- hanya kata kunci
-- hanya judul
-
 Jawab hanya JSON:
 {{
 "kode_terpilih": "...",
@@ -142,29 +141,23 @@ Jawab hanya JSON:
 }}
 """
 
-        with st.spinner("🧠 Gemini menganalisis..."):
-            try:
-                model_gemini = genai.GenerativeModel("gemini-1.5-flash")
-                response = model_gemini.generate_content(prompt)
+        try:
+            model_gemini = genai.GenerativeModel("gemini-1.5-flash")
+            response = model_gemini.generate_content(prompt)
 
-                raw = response.text.strip()
-                raw = raw.replace("```json", "").replace("```", "").strip()
+            raw = response.text.strip()
+            raw = raw.replace("```json", "").replace("```", "").strip()
 
-                hasil = json.loads(raw)
+            hasil = json.loads(raw)
 
-                st.success("✅ Kode Klasifikasi Final")
+            st.success("✅ Hasil Final")
 
-                col1, col2 = st.columns([1, 2])
+            st.metric("📌 Kode", hasil["kode_terpilih"])
+            st.write(f"**Uraian:** {hasil['uraian_terpilih']}")
+            st.info(f"💡 {hasil['alasan']}")
 
-                with col1:
-                    st.metric("📌 Kode", hasil["kode_terpilih"])
-                    st.write(f"**Uraian:** {hasil['uraian_terpilih']}")
-
-                with col2:
-                    st.info(f"💡 **Alasan:**\n\n{hasil['alasan']}")
-
-            except Exception as e:
-                st.error(f"Terjadi error: {str(e)}")
+        except Exception as e:
+            st.error(f"Terjadi error: {str(e)}")
 
 elif proses:
     st.warning("⚠️ Masukkan uraian arsip terlebih dahulu.")
