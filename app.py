@@ -18,7 +18,7 @@ st.caption("Model Semantik (HuggingFace) + Validasi Arsiparis Digital (Google Ge
 
 @st.cache_resource
 def load_semua():
-    df = pd.read_csv("data/klasifikasi.csv")
+    df = pd.read_csv("data/klasifikasi.csv", encoding="latin-1")
     df.columns = df.columns.str.strip()
     model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
     embeddings = model.encode(
