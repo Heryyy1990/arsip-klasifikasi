@@ -23,6 +23,7 @@ def load_semua():
 except:
     df = pd.read_csv("data/klasifikasi.csv", encoding="latin-1")
     df.columns = df.columns.str.strip()
+    
     model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
     embeddings = model.encode(
         df["uraian arsip"].tolist(),
