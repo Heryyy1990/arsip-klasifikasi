@@ -7,26 +7,46 @@ import google.generativeai as genai
 import json
 import os
 
+# ================= UI CONFIG =================
 st.set_page_config(
-    page_title="Klasifikasi Arsip Pemerintah",
-    page_icon="🗂️",
-    layout="wide"
+    page_title="EKlasifikasi Arsip",
+    page_icon="📁",
+    layout="centered"
 )
 
-# ── HEADER ─────────────────────────────
-st.title("🗂️ Sistem Rekomendasi Klasifikasi Arsip")
-st.caption("Model Semantik + Validasi Arsiparis Digital (Gemini)")
+# ================= STYLE =================
+st.markdown("""
+<style>
+body {
+    background-color: #0e1117;
+}
+.block-container {
+    padding-top: 2rem;
+}
+.title {
+    font-size: 32px;
+    font-weight: bold;
+}
+.subtitle {
+    color: #9aa0a6;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# ── LOAD DATA ─────────────────────────
+# ================= HEADER =================
+st.markdown('<div class="title">📁 EKlasifikasi Arsip</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">AI Klasifikasi Arsip (Hybrid: Cepat + Pintar)</div>', unsafe_allow_html=True)
+
+st.write("")
+
+# ================= LOAD MODEL =================
 @st.cache_resource
-def load_semua():
-    # baca CSV (aman dari error)
+def load_data():
     try:
         df = pd.read_csv("data/klasifikasi.csv", encoding="utf-8")
     except:
         df = pd.read_csv("data/klasifikasi.csv", encoding="latin-1", on_bad_lines="skip")
 
-    # 🔥 NORMALISASI KOLOM (INI KUNCI)
     df.columns = (
         df.columns
         .str.lower()
@@ -34,106 +54,85 @@ def load_semua():
         .str.replace(";", "", regex=False)
     )
 
-    # ambil kolom secara fleksibel
-    kolom_kode = [c for c in df.columns if "kode" in c]
-    kolom_uraian = [c for c in df.columns if "uraian" in c]
-
-    if not kolom_kode or not kolom_uraian:
-        st.error(f"Kolom tidak ditemukan. Kolom tersedia: {list(df.columns)}")
-        st.stop()
-
-    kolom_kode = kolom_kode[0]
-    kolom_uraian = kolom_uraian[0]
-
-    # buang data kosong
-    df = df[[kolom_kode, kolom_uraian]].dropna()
-
-    # rename standar
     df = df.rename(columns={
-        kolom_kode: "kode",
-        kolom_uraian: "uraian"
+        df.columns[0]: "kode",
+        df.columns[1]: "uraian"
     })
 
-    # model semantic
     model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
-    embeddings = model.encode(
-        df["uraian"].astype(str).tolist(),
-        show_progress_bar=False
-    )
+    embeddings = model.encode(df["uraian"].astype(str).tolist())
 
     return df, model, embeddings
 
-with st.spinner("⏳ Memuat model AI..."):
-    df, model, embeddings = load_semua()
+df, model, embeddings = load_data()
 
-st.success(f"✅ Siap — {len(df)} kode klasifikasi tersedia")
-st.divider()
+# ================= FORM (ENTER LANGSUNG SUBMIT) =================
+with st.form("form_arsip", clear_on_submit=False):
+    uraian_input = st.text_input("🔎 Masukkan uraian arsip:")
 
-# ── INPUT ─────────────────────────────
-uraian_input = st.text_area(
-    "📝 Masukkan uraian arsip:",
-    height=130
-)
+    col1, col2 = st.columns(2)
 
-proses = st.button("🔍 Klasifikasikan")
+    submit = col1.form_submit_button("🚀 Cari Klasifikasi Cepat")
+    validasi = col2.form_submit_button("🤖 Validasi AI (Hemat quota)")
 
-# ── PROSES ────────────────────────────
-if proses and uraian_input.strip():
+# ================= TAHAP 1 =================
+if submit and uraian_input:
 
-    # Tahap 1 — Semantic
-    with st.spinner("🔎 Analisis semantik..."):
-        q_emb = model.encode([uraian_input])
-        skor = cosine_similarity(q_emb, embeddings)[0]
+    q_emb = model.encode([uraian_input])
+    skor = cosine_similarity(q_emb, embeddings)[0]
 
-        top3_idx = np.argsort(skor)[::-1][:3]
+    top_idx = np.argsort(skor)[::-1][:3]
 
-        kandidat = [
-            {
-                "kode": str(df.iloc[i]["kode"]),
-                "uraian": df.iloc[i]["uraian"],
-                "skor": float(skor[i])
-            }
-            for i in top3_idx
-        ]
+    kandidat = [
+        {
+            "kode": str(df.iloc[i]["kode"]),
+            "uraian": df.iloc[i]["uraian"],
+            "skor": skor[i]
+        }
+        for i in top_idx
+    ]
 
-    st.subheader("📋 3 Kandidat Terbaik")
-
+    st.write("### 📋 Hasil Cepat (Tanpa AI)")
     for k in kandidat:
-        st.write(f"**{k['kode']}** — {k['uraian']} ({k['skor']:.1%})")
+        st.write(f"**{k['kode']}** - {k['uraian']} ({k['skor']:.1%})")
 
-    # Tahap 2 — Gemini
-    st.subheader("🤖 Validasi AI")
+    st.session_state["kandidat"] = kandidat
+    st.session_state["uraian"] = uraian_input
 
-    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", "")
+# ================= TAHAP 2 =================
+if validasi:
 
-    if not api_key:
-        st.error("⚠️ API Key Google AI tidak ditemukan.")
+    kandidat = st.session_state.get("kandidat", [])
+    uraian_input = st.session_state.get("uraian", "")
+
+    if not kandidat:
+        st.warning("⚠️ Jalankan pencarian cepat dulu")
     else:
-        genai.configure(api_key=api_key)
+        api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", "")
 
-        kandidat_text = "\n".join([
-            f"{i+1}. {k['kode']} - {k['uraian']}"
-            for i, k in enumerate(kandidat)
-        ])
+        if not api_key:
+            st.error("API Key tidak ditemukan")
+        else:
+            genai.configure(api_key=api_key)
 
-        prompt = f"""
-Anda adalah arsiparis profesional pemerintahan Indonesia.
+            kandidat_text = "\n".join([
+                f"{i+1}. {k['kode']} - {k['uraian']}"
+                for i, k in enumerate(kandidat)
+            ])
 
-DOKUMEN:
+            prompt = f"""
+Anda adalah arsiparis profesional.
+
+Dokumen:
 {uraian_input}
 
-KANDIDAT:
+Kandidat:
 {kandidat_text}
 
-Gunakan langkah:
-1. Identifikasi isi utama
-2. Tentukan fungsi kegiatan
-3. Cocokkan klasifikasi
-4. Pilih paling spesifik
-5. Perhatikan konteks unit kerja
+Pilih 1 paling tepat.
 
-Jawab hanya JSON:
+Jawab JSON:
 {{
 "kode_terpilih": "...",
 "uraian_terpilih": "...",
@@ -141,23 +140,23 @@ Jawab hanya JSON:
 }}
 """
 
-        try:
-            model_gemini = genai.GenerativeModel("gemini-1.5-flash")
-            response = model_gemini.generate_content(prompt)
+            try:
+                # 🔥 MODEL YANG PASTI ADA
+                model_gemini = genai.GenerativeModel("gemini-1.5-pro")
+                response = model_gemini.generate_content(prompt)
 
-            raw = response.text.strip()
-            raw = raw.replace("```json", "").replace("```", "").strip()
+                raw = response.text.strip()
+                raw = raw.replace("```json", "").replace("```", "")
 
-            hasil = json.loads(raw)
+                hasil = json.loads(raw)
 
-            st.success("✅ Hasil Final")
+                st.write("### 🤖 Hasil AI")
+                st.success(f"{hasil['kode_terpilih']} - {hasil['uraian_terpilih']}")
+                st.info(hasil["alasan"])
 
-            st.metric("📌 Kode", hasil["kode_terpilih"])
-            st.write(f"**Uraian:** {hasil['uraian_terpilih']}")
-            st.info(f"💡 {hasil['alasan']}")
+            except Exception as e:
+                st.error(f"Terjadi error: {str(e)}")
 
-        except Exception as e:
-            st.error(f"Terjadi error: {str(e)}")
-
-elif proses:
-    st.warning("⚠️ Masukkan uraian arsip terlebih dahulu.")
+# ================= FOOTER =================
+st.markdown("---")
+st.caption("EKlasifikasi Arsip by Heryanto S.Pd © 2026 | Powered by Gemini AI")
