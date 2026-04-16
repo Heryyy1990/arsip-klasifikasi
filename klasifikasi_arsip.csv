@@ -1,4 +1,4 @@
-kode,uraian ;
+kode,uraian
 000,umum;
 000.1,ketatausahaan dan kerumahtanggaan;
 000.1.1,telekomunikasi;
@@ -24,53 +24,8 @@ kode,uraian ;
 000.1.8.4,perbaikan peralatan kantor;
 000.1.8.5,perbaikan rumah dinas atau wisma;
 000.1.8.6,kebersihan gedung dan taman;
-000.1.9,pengelolaan jaringan listrik, air, telepon dan komputer;
 000.1.9.1,perbaikan atau pemeliharaan;
-000.1.9.2       ;Pemasangan
-000.1.10       ;Ketertiban dan Keamanan
-000.1.10.1;Pengamanan, Penjagaan, dan Pengawalan terhadap Pejabat, Kantor dan Rumah Dinas
-000.1.10.2;Laporan Ketertiban dan Keamanan
-000.1.11;Administrasi Pengelolaan Parkir
-000.1.12;Administrasi Pakaian Dinas Pegawai, Satpam, Petugas  Kebersihan dan Pegawai lainnya
-000.2;PERLENGKAPAN
-000.2.1 ;Inventarisasi dan Penyimpanan
-000.2.1.1;data hasil inventarisasi dan penyimpanan
-000.2.1.2;laporan dan evaluasi inventarisasi dan penyimpanan
-000.2.2;pemeliharaan peralatan kantor
-000.2.2.1;data hasil pemeliharaan kantor
-000.2.2.2      ;laporan dan evaluasi pemeliharaan kantor
-000.2.3;distribusi
-000.2.3.1     ;barang habis pakai
-000.2.3.2     ;barang milik daerah
-000.2.4    ;penghapusan barang milik daerah, antara lain: keputusan pembentukan tim, berita acara penghapusan barang milik daerah, daftar barang yang dihapuskan, laporan hasil pelaksanaan penghapusan bmd termasuk didalamnya proses lelang penghapusan
-000.2.5;pengelolaan database barang milik daerah
-000.3;pengadaan
-000.3.1;rencana pengadaan barang dan jasa, (antara lain: identifikasi dan analisis kebutuhan barang/jasa, penyusunan dan penetapan rencana penganggaran pengadaan, penetapan kebijakan umum, penyusunan kerangka acuan kerja (kak), pengumuman rencana umum pengadaan)
-000.3.2      ;pengadaan langsung (antara lain: persiapan pemilihan penyedia, pelaksanaan pemilihan penyedia, penandatanganan kontrak, pelaksanaan kontrak)
-000.3.3;pengadaan tidak langsung/lelang (antara lain: persiapan pemilihan penyedia, pelaksanaan pemilihan penyedia, penandatanganan kontrak, pelaksanaan kontrak)
-000.3.4      ;swakelola (antara lain: perencanaan pelaksanaan dan evaluasi)
-000.3.5;pengolahan sistem informasi pengadaan, (antara lain: data base pengguna sistem informasi pengadaan barang/jasa, data base kontrak, data base pengadaan barang/jasa)
-000.3.6 ;monitoring dan evaluasi, (antara lain: laporan hasil monitoring, laporan hasil evaluasi)
-000.4;perpustakaan
-000.4.1;kebijakan di bidang perpustakaan yang dilakukan oleh pemerintah daerah
-000.4.2;deposit bahan pustaka
-000.4.2.1;serah simpan karya cetak dan karya rekam
-000.4.2.2        ;pangkalan data penerbit dan pengusaha rekaman
-000.4.2.3;terbitan internasional dan regional
-000.4.2.4        ;pemantauan wajib serah simpan karya cetak dan karya rekam
-000.4.2.5        ;bibliografi dan katalog
-000.4.3        ;koleksi pustaka
-000.4.3.1       ;pembelian
-000.4.3.2;hibah
 000.4.3.3,hadiah;
-000.4.3.4;
-000.4.3.5;
-000.4.3.6;
-000.4.3.7;
-000.4.3.8;
-000.4.4;
-000.4.5;
-000.4.6;
 000.4.6.1,keanggotaan;
 000.4.6.2,peminjaman;
 000.4.6.3,pengembangan gemar baca;
@@ -88,7 +43,6 @@ kode,uraian ;
 000.4.10.1,perawatan bahan perpustakaan;
 000.4.10.2,perbaikan bahan perpustakaan;
 000.4.10.3,penjilidan bahan perpustakaan;
-000.4.11,reprografi (mikrofilm, reproduksi foto);
 000.4.12,transformasi digital;
 000.4.13,kurasi digital;
 000.4.14,pengembangan perpustakaan;
@@ -129,8 +83,6 @@ kode,uraian ;
 000.5.9,pengelolaan arsip statis;
 000.5.9.1,akuisisi antara lain monitoring fisik dan daftar verifikasi terhadap daftar arsip menetapkan status arsip statis persetujuan untuk penyerahan penetapan arsip yang diserahkan berita acara penyerahan arsip daftar arsip yang diserahkan;
 000.5.9.2,penghargaan dan imbalan;
-"000.5.9.3,sejarah lisan antara lain administrasi kegiatan berita acara wawancara sejarah lisan laporan kegiatan hasil wawancara kaset atau cd atau media
-lain sesuai perkembangan ti dan transkip";
 000.5.9.4,daftar pencarian arsip statis antara lain pengumuman akuisisi daftar pencarian arsip statis;
 000.5.9.5,menyusun sarana bantu temu balik antara lain daftar arsip statis inventaris arsip statis guide;
 000.5.9.6,preservasi preventif antara lain penyimpanan pengendalian hama terpadu reproduksi alih media;
@@ -154,12 +106,10 @@ lain sesuai perkembangan ti dan transkip";
 000.6.2.3,materiil sandi sistem dan peralatan;
 000.6.3,pengkajian persandian kriptografi peralatan sandi komunikasi sandi;
 000.6.3.1,perencanaan pengkajian;
-000,6.3.2,administrasi pengkajian;
 000.6.3.3,pelaksanaan;
 000.6.3.4,pelaporan;
 000.6.4,pembinaan dan pengendalian persandian;
 000.6.4.1,sumber daya manusia sdm;
-000,6.4.2,jaring komunikasi;
 000.6.5,layanan sertifikasi elektronik;
 000.6.5.1,perencanaan dan administrasi;
 000.6.5.2,pelaksanaan verifikasi;
@@ -406,7 +356,6 @@ lain sesuai perkembangan ti dan transkip";
 300.1.6,perlindungan hak-hak sipil dan hak asasi manusia;
 300.2,penanggulangan bencana pencarian dan pertolongan;
 300.2.1,kebijakan di bidang penanggulangan bencana yang dilakukan oleh pemerintah daerah;
-300.2.2,perencanaan penanggulangan bencana, pencarian dan pertolongan;
 300.2.2.1,rencana dan standarisasi dan pengawasan dan perbekalan;
 300.2.2.2,kurikulum dan silabus evaluasi dan monitoring;
 300.2.2.3,tenaga pencarian pertolongan penyiapan potensi pencarian dan pertolongan;
@@ -443,7 +392,6 @@ lain sesuai perkembangan ti dan transkip";
 400.1.2.1,fasilitasi pendidikan keterampilan pengembangan sumber daya;
 400.1.2.2,fasilitasi kesehatan pengembangan sumber daya;
 400.1.2.3,fasilitasi sumber daya hayati dan pengembangan sumber daya;
-400.1.2.4,fasilitasi mineral, energi dan lingkungan hidup;
 400.1.2.5,fasilitasi teknologi dan inovasi;
 400.1.2.6,koordinasi pelaksanaan kebijakan pengembangan sumber daya;
 400.1.2.7,pemantauan dan evaluasi;
@@ -488,7 +436,6 @@ lain sesuai perkembangan ti dan transkip";
 400.1.6.7,pemantauan dan evaluasi;
 400.2,pemberdayaan perempuan dan perlindungan anak;
 400.2.1,kebijakan di bidang pemberdayaan perempuan dan perlindungan anak yang dilakukan oleh pemerintah daerah;
-400.2.2,pengarusutamaan gender ekonomi, politik sosial dan hukum;
 400.2.2.1,data gender;
 400.2.2.2,advokasi dan fasilitasi;
 400.2.3,perlindungan perempuan kekerasan masalah sosial tenaga kerja korban perdagangan;
@@ -503,7 +450,6 @@ lain sesuai perkembangan ti dan transkip";
 400.2.4.1,pencegahan kekerasan terhadap anak;
 400.2.4.2,data perlindungan anak;
 400.2.4.3,advokasi dan fasilitasi;
-400.2.4.4,monitoring, evaluasi dan analisa kebijakan perlindungan anak;
 400.2.4.5,partisipasi publik untuk kesejahteraan anak;
 400.2.5,tumbuh kembang anak pendidikan kesehatan partisipasi lingkungan dan penanaman nilai nilai luhur pengembangan kota layak anak;
 400.2.5.1,pemenuhan hak anak;
@@ -794,7 +740,6 @@ lain sesuai perkembangan ti dan transkip";
 400.7.16.3,kesehatan alternatif dan komplementer;
 400.7.16.4,penapisan dan kemitraan;
 400.7.17,kesehatan kerja dan olah raga;
-400.7.17,1,pelayanan kesehatan kerja;
 400.7.17.2,kapasitas kerja;
 400.7.17.3,lingkungan kerja;
 400.7.17.4,kemitraan kesehatan kerja;
@@ -853,7 +798,6 @@ lain sesuai perkembangan ti dan transkip";
 400.7.30,pengawasan keamanan pangan dan bahan berbahaya;
 400.7.30.1,penilaian keamanan pangan;
 400.7.30.2,standardisasi produk pangan;
-400.7,30.3,inspeksi dan sertifikasi produk pangan;
 400.7.30.4,surveilan dan penyuluhan keamanan pangan;
 400.7.30.5,pengawasan produk dan bahan berbahaya;
 400.7.31,rekam medis;
@@ -1141,7 +1085,7 @@ lain sesuai perkembangan ti dan transkip";
 400.14.5.2,hubungan dengan organisasi sosial  lsm;
 400.14.5.3,hubungan dengan perusahaan;
 400.14.5.4,hubungan dengan perguruan tinggi sekolah termasuk magang pendidikan sistem ganda psg praktek kerja lapang pkl;
-400.14.5.5,fórum kehumasan;
+400.14.5.5,fÃ³rum kehumasan;
 400.14.5.6,hubungan dengan media massa;
 400.14.6,dengar pendapat hearing dprd;
 400.14.7,bahan materi pidato sidang muspida provinsi kota kabupaten;
@@ -1208,7 +1152,7 @@ lain sesuai perkembangan ti dan transkip";
 500.2.3.14,kelembagaan dan penilaian;
 500.2.3.15,uttp dan standar ukuran;
 500.2.3.16,pengawasan ;
-500.2.3.17,balai pengelolaan estándar nasional satuan ukuran;
+500.2.3.17,balai pengelolaan estÃ¡ndar nasional satuan ukuran;
 500.2.3.18,balai pengujian uttp;
 500.2.4,perdagangan berjangka komoditi;
 500.2.4.1,pengkajian pasar;
@@ -1638,7 +1582,6 @@ lain sesuai perkembangan ti dan transkip";
 500.10.7,pembinaan usaha hulu minyak dan gas bumi;
 500.10.7.1,penyiapan dan penawaran wilayah kerja wk minyak dan gas bumi konvensional dan non konvensional;
 500.10.7.2,eksplorasi minyak dan gas bumi antara lain pemanfaatan data migas untuk presentasi makalah publikasi makalah pembukaan data izin pengiriman data ke luar negeri izin pengiriman data ke luar negeri unitisasi lapangan minyak dan gas bumi rekomendasi pengalihan interest rekomendasi penyisihan wilayah kerja minyak dan gas bumi penyiapan dokumen pengakhiran kontrak laporan data survei seismik laporan data pemboran sumur eksplorasi per semester laporan data pemboran sumur eksplorasi tahunan;
-500.10.7.3 eksploitasi minyak dan gas bumi antara lain rekomendasi penggunaan data eksploitasi publikasi makalah analisa laboratorium reprocessing penetapan pengusahaan minyak bumi dari sumur tua penetapan pengusahaan lapangan produksi yang dikembalikan kepada pemerintah buku cadangan minyak dan gas bumi data cadangan strategis penyangga minyak dan gas bumi laporan hasil pemantauan data produksi minyak dan gas bumi laporan hasil inventarisasi mutu minyak dan gas bumi;
 500.10.7.4,pengembangan lapangan minyak dan gas bumi pod;
 500.10.7.5,perpanjangan kontrak kks;
 500.10.7.6,penetapan alokasi dan harga gas;
@@ -1699,7 +1642,6 @@ lain sesuai perkembangan ti dan transkip";
 500.10.13.6,database pengusahaan bioenergi;
 500.10.13.7,penetapan badan usaha sebagai pengelola energi biomassa atau biogas untuk pembangkit listrik;
 500.10.13.8,penetapan spesifikasi bahan bakar nabati;
-"500.10.13.,	usul program bioenergi pemerintah daerah dan lembaga";
 500.10.14,aneka energi;
 500.10.14.1,penerbitan izin usaha aneka energi;
 500.10.14.2,penetapan kapasitas usaha;
@@ -1777,7 +1719,6 @@ lain sesuai perkembangan ti dan transkip";
 500.10.26.9,pengelolaan barang kontrak karya kk;
 500.10.26.10,persetujuan obyek vital nasional obvitnas;
 500.10.26.11,persetujuan perubahan saham direksi komisaris pada perusahaan mineral;
-"500.10.26.12,teguran	 kepada pengusahan kontrak karya kk";
 500.10.26.13,tanggapan kepada pemerintah daerah terkait usaha pertambangan mineral;
 500.10.26.14,pedoman petunjuk teknis pertambangan mineral termasuk rancangan awal sampul dengan rancangan akhir;
 500.10.26.15,pelaporan usaha pertambangan mineral;
@@ -1795,7 +1736,6 @@ lain sesuai perkembangan ti dan transkip";
 500.10.27.9,pengelolaan barang perjanjian karya pengusahaan batubara pkp2b antara lain persetujuan pengadaan barang modal masterlist;
 500.10.27.10,persetujuan obyek vital nasional obvitnas;
 500.10.27.11,persetujuan perubahan saham direksi komisaris pada perusahaan perjanjian karya pengusahaan batubara pkp2b;
-"500.10.27.12,teguran	 kepada pengusahan perjanjian karya pengusahaan batubara pkp2b";
 500.10.27.13,tanggapan kepada pemerintah daerah terkait usaha pertambangan batubara;
 500.10.27.14,pedoman petunjuk teknis pertambangan mineral termasuk rancangan awal sampul dengan rancangan akhir;
 500.10.27.15,pelaporan usaha pertambangan batubara;
@@ -1856,7 +1796,6 @@ lain sesuai perkembangan ti dan transkip";
 500.10.34.1,teknologi eksplorasi;
 500.10.34.2,teknologi eksploitasi;
 500.10.34.3,laboratorium;
-"500.10.34.,	study";
 500.10.34.5,teknologi proses;
 500.10.34.6,teknologi aplikasi produk;
 500.10.34.7,teknologi gas;
@@ -1928,7 +1867,7 @@ lain sesuai perkembangan ti dan transkip";
 500.11.11.4,pengusulan pengangkatan dan pemberhentian penyidik pegawai negeri sipil ppns;
 500.11.12,analisa dan evaluasi jaringan jaringan transportasi sungai danau dan penyeberangan;
 500.11.12.1,pendataan jaringan transportasi sungai danau dan penyebrangan;
-500.11.12.2,análisis serta informasi jaringan transportasi sungai danau dan penyeberangan;
+500.11.12.2,anÃ¡lisis serta informasi jaringan transportasi sungai danau dan penyeberangan;
 500.11.13,pengembangan jaringan jaringan transportasi sungai danau dan penyeberangan;
 500.11.13.1,pengembangan dan penetapan jaringan transportasi sungai danau dan penyeberangan peta jaringan blueprint jaringan;
 500.11.13.2,pengembangan sistem informasi manajemen sim lalu lintas dan angkutan sungai danau dan penyeberangan;
@@ -1944,7 +1883,6 @@ lain sesuai perkembangan ti dan transkip";
 500.11.17,kualifikasi teknis petugas pelabuhan sungai danau dan penyeberangan;
 500.11.18,manajemen lalu lintas sungai danau dan penyeberangan;
 500.11.18.1,manajemen lalu lintas;
-"500.11.18.2,tata cara berlalu lintas di sungai danau	dan penyeberangan";
 500.11.18.3,penyidik pegawai negeri sipil bidang lalu lintas dan angkutan sungai  danau;
 500.11.18.4,sertifikasi inspektur sungai dan danau dan pejabat pemberangkatan angkutan sungai dan danau;
 500.11.19,alur dan perambuan lalu lintas sungai danau dan penyeberangan;
@@ -2136,7 +2074,7 @@ lain sesuai perkembangan ti dan transkip";
 500.15.2.1,perencanaan tenaga kerja perusahaan pemerintah;
 500.15.2.2,perencanaan tenaga kerja perusahaan swasta;
 500.15.3,pengembangan standarisasi kompetensi;
-500.15.3.1,penerapan estándar kompetensi;
+500.15.3.1,penerapan estÃ¡ndar kompetensi;
 500.15.3.2,pengembangan standarisasi kompetensi;
 500.15.3.3,pengembangan program pelatihan ketenagakerjaan;
 500.15.3.4,pengembangan program pelatihan produktivitas dan kewirausahaan;
@@ -2144,7 +2082,7 @@ lain sesuai perkembangan ti dan transkip";
 500.15.4,bina lembaga dan sarana pelatihan kerja;
 500.15.4.1,akreditasi dan sistem informasi kelembagaan;
 500.15.4.2,pengembangan sarana dan fasilitas lembaga pelatihan;
-500.15.4.3,pengembangan estándar mutu psm lembaga pelatihan;
+500.15.4.3,pengembangan estÃ¡ndar mutu psm lembaga pelatihan;
 500.15.4.4,sistem pendanaan dan kerjasama antar lembaga;
 500.15.5,bina instruktur dan tenaga pelatihan;
 500.15.5.1,instruktur dan psm lembaga pelatihan pemerintah;
@@ -2345,7 +2283,6 @@ lain sesuai perkembangan ti dan transkip";
 600.1.4,pengelolaan sumber daya air;
 600.1.4.1,pengelolaan sungai dan pantai;
 600.1.4.2,pengelolaan irigasi dan rawa;
-600.1.4.3,pengelolaan bendungan, danau, situ, dan embung;
 600.1.4.4,pengelolaan air tanah dan air baku;
 600.1.5,operasi dan pemeliharaan sumber daya air;
 600.1.5.1,operasi dan pemeliharaan sungai dan pantai;
@@ -2657,9 +2594,9 @@ lain sesuai perkembangan ti dan transkip";
 800.1.4.4,standar kinerja pegawai skp dan penilaian prestasi kerja;
 800.1.4.5,angka kredit antara lain pengajuan daftar usul pengajuan angka kredit penilaian daftar usul pengajuan angka kredit;
 800.1.5,kinerja aparatur sipil negara;
-800.1.5.1,hasil penilaian kinerja dan estándar kerja;
+800.1.5.1,hasil penilaian kinerja dan estÃ¡ndar kerja;
 800.1.5.2,pengelolaan databse dan analisis sistem informasi kinerja;
-800.1.5.3,evaluasi dan pemantauan penilaian kinerja dan estándar kinerja;
+800.1.5.3,evaluasi dan pemantauan penilaian kinerja dan estÃ¡ndar kinerja;
 800.1.6,kode etik disiplin pemberhentian dan pensiun asn;
 800.1.6.1,kode etik pegawai;
 800.1.6.2,disiplin;
@@ -2814,7 +2751,7 @@ lain sesuai perkembangan ti dan transkip";
 900.1.12.1,anggaran daerah;
 900.1.12.2,dukungan teknis anggaran daerah;
 900.1.13,pendapatan dan investasi daerah;
-900.1.13.1,pajak daerah dan retribusi daerah antara lain fasilitasi pelaksanaan kebijakan standardisasi pajak daerah dan retribusi daerah penyiapan bahan perumusan bimbingan teknis pajak daerah dan retribusi daerah penyiapan bahan perumusan análisis dan evaluasi pemantauan pajak daerah dan retribusi daerah penyiapan bahan perumusan kebijakan fasilitasi pemberian insentif pajak daerah dan retribusi daerah;
+900.1.13.1,pajak daerah dan retribusi daerah antara lain fasilitasi pelaksanaan kebijakan standardisasi pajak daerah dan retribusi daerah penyiapan bahan perumusan bimbingan teknis pajak daerah dan retribusi daerah penyiapan bahan perumusan anÃ¡lisis dan evaluasi pemantauan pajak daerah dan retribusi daerah penyiapan bahan perumusan kebijakan fasilitasi pemberian insentif pajak daerah dan retribusi daerah;
 900.1.13.2,badan usaha milik daerah antara lain fasilitasi serta bimbingan teknis di bidang usaha milik daerah lembaga keuangan fasilitas serta bimbingan teknis di bidang badan usaha milik daerah lembaga non keuangan penyiapan pelaksanaan monitoring dan evaluasi badan usaha milik daerah;
 900.1.13.3,badan layanan umum daerah antara lain analisis standardisasi teknis fasilitasi serta bimbingan teknis pemantauan dan evaluasi di bidang pola pengelolaan keuangan badan layanan umum daerah pembinaan pelaksanaan kebijakan standardisasi teknis prosedur dan kriteria fasilitasi serta bimbingan teknis penerapan pola pengelolaan keuangan keuangan badan layanan umum daerah penyiapan pelaksanaan monitoring dan evaluasi pola pengelolaan keuangan badan layanan umum daerah;
 900.1.13.4,pengelolaan kekayaan daerah antara lain fasilitasi serta bimbingan teknis pengelolaan kekayaan fasilitasi serta bimbingan teknis investasi daerah penyiapan pelaksanaan monitoring dan evaluasi pengelolaan kekayaan dan investasi daerah;
