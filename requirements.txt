@@ -1,3 +1,3 @@
-streamlit==1.32.2
+streamlit
 pandas
-google-generativeai==0.5.4
+google-generativeai>=0.8.3
