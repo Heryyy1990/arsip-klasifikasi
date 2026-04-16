@@ -3,71 +3,67 @@ import pandas as pd
 import google.generativeai as genai
 import os
 
-# --- 1. SETUP HALAMAN ---
-st.set_page_config(page_title="Arsip Muna Barat", layout="centered")
+# Konfigurasi Halaman
+st.set_page_config(page_title="AI Arsip Muna Barat", layout="wide")
 
-st.title("📂 Penentu Klasifikasi Arsip")
+st.title("📂 Penentu Kode Klasifikasi Arsip")
 st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
 
-# --- 2. CEK FILE DATA ---
-csv_file = 'klasifikasi_arsip.csv'
-if not os.path.exists(csv_file):
-    # Cek apakah ada file cadangan jika nama berbeda
-    csv_file = 'klasifikasi_arsip.csv'
-
-if not os.path.exists(csv_file):
-    st.error(f"❌ File database tidak ditemukan di GitHub!")
+# --- 1. VALIDASI API KEY DARI SECRETS ---
+if "GEMINI_API_KEY" not in st.secrets:
+    st.error("❌ API Key tidak ditemukan! Pastikan Anda sudah menulis GEMINI_API_KEY di menu Settings > Secrets.")
     st.stop()
 
-# --- 3. INIT AI & HANDLING 404 ---
-def init_model():
+# --- 2. VALIDASI DATA ---
+# Mencari file CSV yang ada (baik yang asli maupun yang sudah di-upgrade)
+data_file = 'klasifikasi_arsip.csv' if os.path.exists('klasifikasi_arsip_upgraded.csv') else 'klasifikasi_arsip.csv'
+
+if not os.path.exists(data_file):
+    st.error(f"❌ File '{data_file}' tidak ditemukan di GitHub Anda.")
+    st.stop()
+
+@st.cache_data
+def load_data():
+    return pd.read_csv(data_file)
+
+df = load_data()
+
+# --- 3. INISIALISASI MODEL (DENGAN FIX 404) ---
+def get_recommendation(text_input):
     try:
-        if "GEMINI_API_KEY" not in st.secrets:
-            st.error("❌ API Key (GEMINI_API_KEY) tidak ditemukan di Secrets!")
-            return None
-            
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         
-        # Menggunakan gemini-1.5-flash secara langsung
-        # Versi library 0.7.2+ akan mengenali ini secara otomatis
-        return genai.GenerativeModel('gemini-1.5-flash')
+        # Menggunakan model 1.5-flash (Versi stabil)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Mengambil sampel context untuk membantu AI
+        column_name = 'ai_search_context' if 'ai_search_context' in df.columns else 'uraian'
+        sample = df[column_name].head(15).tolist()
+        
+        prompt = f"""Tugas: Berikan 3 rekomendasi kode klasifikasi arsip.
+        Pola Data: {sample}
+        Perihal: {text_input}
+        Format: KODE - URAIAN (ALASAN)"""
+        
+        response = model.generate_content(prompt)
+        return response.text
     except Exception as e:
-        st.error(f"❌ Gagal konfigurasi AI: {e}")
-        return None
+        # Jika error 404 muncul, tampilkan instruksi debug
+        return f"Error: {str(e)}"
 
-# --- 4. LOAD DATA ---
-@st.cache_data
-def load_data(file):
-    return pd.read_csv(file)
+# --- 4. TAMPILAN UTAMA ---
+uraian_surat = st.text_area("Masukkan Perihal/Uraian Surat:", height=150)
 
-df = load_data(csv_file)
-
-# --- 5. TAMPILAN ---
-query = st.text_area("✍️ Masukkan Perihal/Uraian Surat:", height=150)
-
-if st.button("Mulai Analisis"):
-    if not query:
-        st.warning("Mohon isi perihal surat.")
+if st.button("Cek Kode Klasifikasi"):
+    if not uraian_surat:
+        st.warning("Mohon isi uraian surat terlebih dahulu.")
     else:
-        model = init_model()
-        if model:
-            with st.spinner("AI sedang mencocokkan kode..."):
-                try:
-                    # Ambil contoh data untuk konteks
-                    search_col = 'ai_search_context' if 'ai_search_context' in df.columns else 'uraian'
-                    ref = df[search_col].head(20).tolist()
-                    
-                    prompt = f"""
-                    Anda Pakar Arsiparis. Gunakan pola klasifikasi ini: {ref}
-                    Tentukan 3 kode klasifikasi terbaik untuk perihal: {query}
-                    Tampilkan hanya: KODE - URAIAN (ALASAN)
-                    """
-                    
-                    response = model.generate_content(prompt)
-                    st.success("✅ Rekomendasi Kode:")
-                    st.markdown(response.text)
-                except Exception as e:
-                    # Jika masih 404, tampilkan instruksi debug
-                    st.error(f"Kendala: {e}")
-                    if "404" in str(e):
-                        st.info("💡 Solusi: Silakan klik 'Manage App' > '...' > 'Reboot App' di dashboard Streamlit Anda.")
+        with st.spinner("Sedang menganalisis..."):
+            hasil = get_recommendation(uraian_surat)
+            if "Error" in hasil:
+                st.error(hasil)
+                if "404" in hasil:
+                    st.info("💡 **Tips Solusi 404:** Pastikan file requirements.txt Anda berisi: `google-generativeai>=0.5.0` lalu lakukan 'Reboot App' di dashboard Streamlit.")
+            else:
+                st.success("✅ Rekomendasi Berhasil!")
+                st.markdown(hasil)
