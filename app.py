@@ -1,30 +1,34 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-import google.generativeai as genai
+import re
 import json
 import os
 
-st.set_page_config(page_title="EKlasifikasi Arsip", page_icon="📁", layout="centered")
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import google.generativeai as genai
 
-st.title("📁 EKlasifikasi Arsip")
-st.caption("Hierarchical Classification (Fungsi → Sub → Detail)")
+# ================= CONFIG =================
+st.set_page_config(
+    page_title="Klasifikasi Arsip Pemerintah",
+    page_icon="🗂️",
+    layout="wide"
+)
 
-# ================= CONFIG GEMINI =================
-api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY", "")
+st.title("🗂️ Sistem Klasifikasi Arsip")
+st.caption("AI Berbasis Fungsi + Validasi Arsiparis (Gemini)")
+
+# ================= API KEY =================
+api_key = st.secrets.get("GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY")
+
 if api_key:
     genai.configure(api_key=api_key)
 
 # ================= LOAD DATA =================
 @st.cache_resource
 def load_data():
-    try:
-        df = pd.read_csv("data/klasifikasi.csv", encoding="utf-8")
-    except:
-        df = pd.read_csv("data/klasifikasi.csv", encoding="latin-1", on_bad_lines="skip")
-
+    df = pd.read_csv("data/klasifikasi.csv")
     df.columns = df.columns.str.lower().str.strip()
 
     df = df.rename(columns={
@@ -32,127 +36,118 @@ def load_data():
         df.columns[1]: "uraian"
     })
 
-    df["kode"] = df["kode"].astype(str)
+    df["kode"] = df["kode"].astype(str).str.strip()
     df["uraian"] = df["uraian"].astype(str)
 
     df = df[df["uraian"].str.len() > 3].dropna().reset_index(drop=True)
 
-    # ================= HIERARCHY =================
+    # hierarchy
     df["level"] = df["kode"].apply(lambda x: x.count("."))
-
     df["fungsi_kode"] = df["kode"].str.split(".").str[0]
-
-    df["subfungsi_kode"] = df["kode"].apply(
-        lambda x: ".".join(x.split(".")[:2]) if x.count(".") >= 1 else x
-    )
 
     return df
 
 df = load_data()
 
-# ================= MAPPING FUNGSI =================
+# mapping fungsi
 fungsi_dict = df[df["level"] == 0].set_index("kode")["uraian"].to_dict()
 
-df["fungsi_nama"] = df["fungsi_kode"].map(fungsi_dict)
-
 # ================= MODEL =================
-model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+@st.cache_resource
+def load_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")  # lebih stabil
+
+model = load_model()
 
 @st.cache_resource
 def build_embeddings(data):
-    return model.encode(data["uraian"].tolist(), batch_size=32, show_progress_bar=False)
+    return model.encode(data["uraian"].tolist(), show_progress_bar=False)
 
 embeddings = build_embeddings(df)
 
-# ================= DETEKSI FUNGSI (OUTPUT KODE) =================
+# ================= DETEKSI FUNGSI =================
 def deteksi_fungsi(teks):
 
     if not api_key:
         return None
 
-    daftar_fungsi = "\n".join([
-        f"{k} = {v}" for k, v in fungsi_dict.items()
-    ])
+    daftar = "\n".join([f"{k} = {v}" for k, v in fungsi_dict.items()])
 
     prompt = f"""
-Anda adalah arsiparis.
+Anda arsiparis.
 
 Dokumen:
 {teks}
 
-Pilih kode fungsi PALING TEPAT dari daftar berikut:
+Pilih kode fungsi paling tepat dari daftar:
 
-{daftar_fungsi}
+{daftar}
 
-Jawab hanya kodenya saja.
-Contoh: 900
+Jawab HANYA angka.
 """
 
     try:
         m = genai.GenerativeModel("gemini-1.5-flash-latest")
         res = m.generate_content(prompt)
-        return res.text.strip()
+
+        raw = res.text.strip()
+        kode = re.findall(r"\d+", raw)
+
+        return kode[0] if kode else None
+
     except:
         return None
 
-# ================= SEARCH FUNCTION =================
-def semantic_search(data, query, top_k=5):
-    emb = model.encode(data["uraian"].tolist(), batch_size=32)
+# ================= SEARCH =================
+def semantic_search(data, query, top_k=3):
+    emb = model.encode(data["uraian"].tolist())
     q_emb = model.encode([query])
+
     skor = cosine_similarity(q_emb, emb)[0]
     idx = np.argsort(skor)[::-1][:top_k]
 
-    hasil = []
-    for i in idx:
-        hasil.append({
+    return [
+        {
             "kode": data.iloc[i]["kode"],
             "uraian": data.iloc[i]["uraian"],
             "skor": skor[i]
-        })
-    return hasil
+        }
+        for i in idx
+    ]
 
 # ================= UI =================
-with st.form("form"):
-    uraian_input = st.text_input("🔎 Masukkan uraian arsip:")
-    col1, col2 = st.columns(2)
-    submit = col1.form_submit_button("🚀 Cari")
-    validasi = col2.form_submit_button("🤖 Validasi AI")
+uraian_input = st.text_area("📝 Uraian Arsip", height=150)
+
+col1, col2 = st.columns(2)
+submit = col1.button("🔍 Klasifikasikan", use_container_width=True)
+validasi = col2.button("🤖 Validasi AI", use_container_width=True)
 
 # ================= PROSES =================
 if submit and uraian_input:
 
-    fungsi_kode = deteksi_fungsi(uraian_input)
+    # ===== Tahap 0: fungsi =====
+    fungsi = deteksi_fungsi(uraian_input)
 
-    if not fungsi_kode or fungsi_kode not in fungsi_dict:
-        st.warning("⚠️ Fungsi tidak terdeteksi → fallback ke semua data")
-        df_fungsi = df
+    if fungsi and fungsi in fungsi_dict:
+        st.caption(f"🧭 Fungsi: {fungsi} - {fungsi_dict[fungsi]}")
+        df_filtered = df[df["fungsi_kode"] == fungsi]
     else:
-        st.caption(f"🧭 Fungsi: {fungsi_kode} - {fungsi_dict[fungsi_kode]}")
-        df_fungsi = df[df["fungsi_kode"] == fungsi_kode]
+        st.warning("⚠️ Fungsi tidak terdeteksi → fallback")
+        df_filtered = df
 
-    # ================= LEVEL 2 (SUBFUNGSI) =================
-    hasil_sub = semantic_search(df_fungsi, uraian_input, top_k=3)
+    # ===== Tahap 1: kandidat =====
+    kandidat = semantic_search(df_filtered, uraian_input, top_k=3)
 
-    sub_kode_terpilih = hasil_sub[0]["kode"]
+    st.subheader("📋 Kandidat Klasifikasi")
 
-    df_sub = df[df["subfungsi_kode"] == sub_kode_terpilih]
-
-    # ================= LEVEL 3 (DETAIL) =================
-    hasil_detail = semantic_search(df_sub, uraian_input, top_k=3)
-
-    st.write("### 📂 Level Fungsi")
-    for k in hasil_sub:
+    for k in kandidat:
         st.write(f"**{k['kode']}** - {k['uraian']} ({k['skor']:.1%})")
 
-    st.write("### 📄 Level Detail")
-    for k in hasil_detail:
-        st.write(f"**{k['kode']}** - {k['uraian']} ({k['skor']:.1%})")
-
-    st.session_state["kandidat"] = hasil_detail
+    st.session_state["kandidat"] = kandidat
     st.session_state["uraian"] = uraian_input
-    st.session_state["fungsi"] = fungsi_kode
+    st.session_state["fungsi"] = fungsi
 
-# ================= VALIDASI AI =================
+# ================= VALIDASI GEMINI =================
 if validasi:
 
     kandidat = st.session_state.get("kandidat", [])
@@ -160,7 +155,7 @@ if validasi:
     fungsi = st.session_state.get("fungsi", "")
 
     if not kandidat:
-        st.warning("⚠️ Jalankan pencarian dulu")
+        st.warning("⚠️ Jalankan klasifikasi dulu")
     elif not api_key:
         st.error("API key tidak ada")
     else:
@@ -184,9 +179,14 @@ Kandidat:
 
 Pilih yang paling tepat.
 
-Jawab JSON:
+WAJIB:
+- Output JSON
+- Tanpa markdown
+
+Format:
 {{
 "kode_terpilih": "...",
+"uraian_terpilih": "...",
 "alasan": "..."
 }}
 """
@@ -195,15 +195,31 @@ Jawab JSON:
             m = genai.GenerativeModel("gemini-1.5-flash-latest")
             res = m.generate_content(prompt)
 
-            raw = res.text.strip().replace("```json", "").replace("```", "")
+            raw = res.text.strip().replace("```json", "").replace("```", "").strip()
+
+            if not raw.startswith("{"):
+                raise ValueError("Invalid JSON")
+
             hasil = json.loads(raw)
 
-            st.write("### 🤖 Hasil AI")
-            st.success(hasil["kode_terpilih"])
-            st.info(hasil["alasan"])
+        except:
+            # fallback aman
+            hasil = {
+                "kode_terpilih": kandidat[0]["kode"],
+                "uraian_terpilih": kandidat[0]["uraian"],
+                "alasan": "Fallback: AI gagal parsing"
+            }
 
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+        st.subheader("✅ Hasil Final")
+
+        col1, col2 = st.columns([1,2])
+
+        with col1:
+            st.metric("Kode", hasil["kode_terpilih"])
+            st.write(hasil["uraian_terpilih"])
+
+        with col2:
+            st.info(hasil["alasan"])
 
 # ================= FOOTER =================
 st.markdown("---")
