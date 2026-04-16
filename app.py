@@ -39,7 +39,7 @@ st.markdown("""
 def load_data():
     try:
         # Menggunakan file hasil upgrade dari Colab/Script sebelumnya
-        df = pd.read_csv('klasifikasi_arsip_upgraded.csv')
+        df = pd.read_csv('klasifikasi_arsip.csv')
         return df
     except FileNotFoundError:
         return None
