@@ -1,64 +1,61 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
+import os
 
-# --- CONFIG ---
-st.set_page_config(page_title="Arsip Muna Barat", layout="centered")
+# 1. Konfigurasi Halaman Dasar
+st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
+
+st.title("📂 Penentu Klasifikasi Arsip")
+st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
+
+# --- SISTEM CEK MANDIRI (Agar tidak langsung eror) ---
+
+# Cek File CSV
+data_file = 'klasifikasi_arsip.csv'
+if not os.path.exists(data_file):
+    st.error(f"❌ File '{data_file}' tidak ditemukan di GitHub kamu. Pastikan nama filenya sama persis.")
+    st.stop()
+
+# Cek API Key di Secrets
+if "GEMINI_API_KEY" not in st.secrets:
+    st.error("❌ API Key belum diatur! Masuk ke Settings > Secrets di Streamlit Cloud, lalu masukkan: GEMINI_API_KEY = 'KUNCI_KAMU'")
+    st.stop()
 
 # --- LOAD DATA ---
 @st.cache_data
 def load_data():
-    try:
-        return pd.read_csv('klasifikasi_arsip_upgraded.csv')
-    except:
-        st.error("File 'klasifikasi_arsip.csv' tidak ditemukan!")
-        return None
+    return pd.read_csv(data_file)
 
 df = load_data()
 
-# --- INIT AI ---
-def start_ai():
-    try:
-        api_key = st.secrets["GEMINI_API_KEY"]
-        genai.configure(api_key=api_key)
-        
-        # Cek model yang tersedia (Untuk Debugging)
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Coba gunakan nama model paling standar
-        # Jika 'models/gemini-1.5-flash' tidak ada, dia akan coba yang lain
-        target_model = 'gemini-1.5-flash'
-        if f'models/{target_model}' not in available_models:
-             # Jika 1.5 flash tidak ada, tampilkan daftar yang tersedia di log
-             st.warning(f"Model {target_model} tidak terdeteksi. Model tersedia: {available_models}")
-        
-        return genai.GenerativeModel(target_model)
-    except Exception as e:
-        st.error(f"Gagal inisialisasi AI: {e}")
-        return None
+# --- INISIALISASI AI ---
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # Menggunakan model 1.5-flash
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error(f"Gagal memuat AI: {e}")
+    st.stop()
 
-# --- UI ---
-st.title("📂 Penentu Klasifikasi Arsip")
-st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
-
-query = st.text_area("Masukkan Perihal Surat:", placeholder="Contoh: Surat permohonan cuti...")
+# --- TAMPILAN INPUT ---
+query = st.text_area("Masukkan Perihal Surat:", placeholder="Contoh: Permohonan cuti tahunan...")
 
 if st.button("Cek Kode Sekarang"):
     if not query:
-        st.warning("Isi perihal dulu!")
+        st.warning("Silakan tulis perihal suratnya dulu.")
     else:
-        model = start_ai()
-        if model:
-            with st.spinner("Menganalisis..."):
-                try:
-                    # Ambil sedikit sampel untuk panduan
-                    ref = df['ai_search_context'].head(20).tolist() if df is not None else ""
-                    
-                    prompt = f"Anda pakar arsip. Berdasarkan data: {ref}\n\nTentukan 3 kode klasifikasi terbaik untuk: {query}"
-                    
-                    response = model.generate_content(prompt)
-                    st.success("Hasil Analisis:")
-                    st.markdown(response.text)
-                except Exception as e:
-                    st.error(f"Terjadi Kesalahan: {e}")
-                    st.info("Catatan: Jika error 404 berlanjut, silakan lakukan REBOOT di Dashboard Streamlit.")
+        with st.spinner("AI sedang menganalisis..."):
+            try:
+                # Ambil sedikit sampel referensi dari data kamu
+                ref = df['ai_search_context'].head(20).tolist()
+                
+                prompt = f"""Anda adalah Arsiparis Ahli. Gunakan pola ini: {ref}
+                Tentukan 3 kode klasifikasi terbaik untuk perihal: {query}
+                Berikan format: KODE - URAIAN (ALASAN)"""
+                
+                response = model.generate_content(prompt)
+                st.success("Hasil Rekomendasi:")
+                st.markdown(response.text)
+            except Exception as e:
+                st.error(f"Terjadi kendala saat analisis: {e}")
