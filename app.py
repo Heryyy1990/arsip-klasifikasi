@@ -18,7 +18,7 @@ st.markdown("""
 @st.cache_data
 def load_data():
     # Pastikan file ini ada di repo GitHub kamu
-    df = pd.read_csv('klasifikasi_arsip_upgraded.csv')
+    df = pd.read_csv('klasifikasi_arsip.csv')
     return df
 
 try:
