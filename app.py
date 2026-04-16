@@ -10,7 +10,7 @@ import os
 st.set_page_config(page_title="EKlasifikasi Arsip", page_icon="📁", layout="centered")
 
 st.title("📁 EKlasifikasi Arsip")
-st.caption("AI Klasifikasi Arsip (Hybrid: Cepat + Pintar + Belajar)")
+st.caption("AI Klasifikasi Arsip (Cepat + Validasi AI)")
 
 # ================= LOAD DATA =================
 @st.cache_resource
@@ -35,12 +35,11 @@ def load_data():
 
     return df, model, embeddings
 
-# ================= LOAD FEEDBACK =================
+# ================= FEEDBACK (TIDAK MENGGANGGU RANKING) =================
 def load_feedback():
     if os.path.exists("data/feedback.csv"):
         return pd.read_csv("data/feedback.csv")
-    else:
-        return pd.DataFrame(columns=["uraian", "kode"])
+    return pd.DataFrame(columns=["uraian", "kode"])
 
 def save_feedback(uraian, kode):
     df_fb = load_feedback()
@@ -50,8 +49,6 @@ def save_feedback(uraian, kode):
 # ================= INIT =================
 df, model, embeddings = load_data()
 feedback_df = load_feedback()
-
-st.success(f"✅ {len(df)} data siap | {len(feedback_df)} pembelajaran tersimpan")
 
 # ================= FORM =================
 with st.form("form"):
@@ -63,18 +60,6 @@ with st.form("form"):
 # ================= TAHAP 1 =================
 if submit and uraian_input:
 
-    # 🔥 PRIORITAS FEEDBACK (INI KUNCINYA)
-    if not feedback_df.empty:
-        cocok = feedback_df[feedback_df["uraian"].str.lower() == uraian_input.lower()]
-        if not cocok.empty:
-            kode_fb = cocok.iloc[-1]["kode"]
-            uraian_fb = df[df["kode"] == kode_fb]["uraian"].values
-
-            st.success("🎯 Ditemukan dari pembelajaran sebelumnya!")
-            st.write(f"**{kode_fb}** - {uraian_fb[0] if len(uraian_fb) else ''}")
-            st.stop()
-
-    # semantic search
     q_emb = model.encode([uraian_input])
     skor = cosine_similarity(q_emb, embeddings)[0]
 
@@ -99,18 +84,18 @@ if submit and uraian_input:
 # ================= PILIH MANUAL =================
 if "kandidat" in st.session_state:
 
-    st.write("### ✍️ Pilih Kode yang Benar (Melatih AI)")
+    st.write("### ✍️ Pilih Kode yang Benar")
 
     opsi = [f"{k['kode']} - {k['uraian']}" for k in st.session_state["kandidat"]]
 
     pilihan = st.selectbox("Pilih hasil yang paling tepat:", opsi)
 
-    if st.button("💾 Simpan Pembelajaran"):
+    if st.button("💾 Simpan"):
         kode_terpilih = pilihan.split(" - ")[0]
         save_feedback(st.session_state["uraian"], kode_terpilih)
-        st.success("✅ Pembelajaran disimpan!")
+        st.success("Tersimpan")
 
-# ================= TAHAP 2 =================
+# ================= TAHAP 2 (OPSIONAL AI) =================
 if validasi:
 
     kandidat = st.session_state.get("kandidat", [])
@@ -140,7 +125,7 @@ Dokumen:
 Kandidat:
 {kandidat_text}
 
-Pilih 1 paling tepat.
+Pilih 1 paling tepat berdasarkan fungsi kegiatan.
 
 Jawab JSON:
 {{
@@ -166,4 +151,4 @@ Jawab JSON:
 
 # ================= FOOTER =================
 st.markdown("---")
-st.caption("EKlasifikasi Arsip © 2026 | AI Belajar dari Anda")
+st.caption("EKlasifikasi Arsip © 2026")
