@@ -2,82 +2,63 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 
-# --- Konfigurasi Halaman ---
-st.set_page_config(page_title="AI Arsip Muna Barat", layout="wide")
+# --- CONFIG ---
+st.set_page_config(page_title="Arsip Muna Barat", layout="centered")
 
-# Custom CSS untuk tampilan lebih profesional
-st.markdown("""
-    <style>
-    .main { background-color: #f9f9f9; }
-    .stButton>button { background-color: #0d47a1; color: white; font-weight: bold; border-radius: 8px; }
-    .result-box { padding: 20px; background-color: white; border-left: 6px solid #0d47a1; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    </style>
-""", unsafe_allow_html=True)
-
-# --- Load Dataset ---
+# --- LOAD DATA ---
 @st.cache_data
 def load_data():
     try:
-        return pd.read_csv('klasifikasi_arsip.csv')
+        return pd.read_csv('klasifikasi_arsip_upgraded.csv')
     except:
+        st.error("File 'klasifikasi_arsip.csv' tidak ditemukan!")
         return None
 
-df_arsip = load_data()
+df = load_data()
 
-# --- Fungsi Inisialisasi AI ---
-def get_ai_model():
+# --- INIT AI ---
+def start_ai():
     try:
-        # Mengambil API Key dari Secrets Streamlit Cloud
         api_key = st.secrets["GEMINI_API_KEY"]
         genai.configure(api_key=api_key)
-        # Menggunakan nama model standar tanpa awalan 'models/' untuk stabilitas
-        return genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Cek model yang tersedia (Untuk Debugging)
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Coba gunakan nama model paling standar
+        # Jika 'models/gemini-1.5-flash' tidak ada, dia akan coba yang lain
+        target_model = 'gemini-1.5-flash'
+        if f'models/{target_model}' not in available_models:
+             # Jika 1.5 flash tidak ada, tampilkan daftar yang tersedia di log
+             st.warning(f"Model {target_model} tidak terdeteksi. Model tersedia: {available_models}")
+        
+        return genai.GenerativeModel(target_model)
     except Exception as e:
-        st.error(f"Konfigurasi Secrets Gagal: {e}")
+        st.error(f"Gagal inisialisasi AI: {e}")
         return None
 
-# --- Tampilan Utama ---
-st.title("📂 Penentu Kode Klasifikasi Arsip")
-st.markdown("##### Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
-
-if df_arsip is None:
-    st.error("File 'klasifikasi_arsip_upgraded.csv' tidak ditemukan di GitHub.")
-    st.stop()
-
-model = get_ai_model()
-
-# Area Input
-user_query = st.text_area("✍️ Masukkan Perihal/Uraian Arsip:", placeholder="Contoh: Surat permohonan izin cuti tahunan pegawai...", height=120)
-
-if st.button("Mulai Analisis"):
-    if not user_query:
-        st.warning("Mohon masukkan deskripsi surat.")
-    elif model:
-        with st.spinner("AI sedang menganalisis database kearsipan..."):
-            try:
-                # Mengambil sampel data referensi agar AI memahami pola klasifikasi
-                referensi = df_arsip['ai_search_context'].head(50).tolist()
-                
-                prompt = f"""
-                Anda adalah Pakar Arsiparis. Tugas Anda memberikan 3 rekomendasi kode klasifikasi.
-                
-                REFERENSI STRUKTUR:
-                {referensi}
-
-                SURAT USER: "{user_query}"
-
-                BERIKAN HASIL:
-                1. Kode Klasifikasi - Uraian
-                2. Alasan logis pemilihan kode tersebut.
-                """
-                
-                response = model.generate_content(prompt)
-                st.success("✅ Analisis Selesai")
-                st.markdown(f'<div class="result-box">{response.text}</div>', unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.error(f"Error AI: {e}")
-                st.info("Pastikan file requirements.txt sudah berisi 'google-generativeai>=0.5.0'")
-
-st.divider()
+# --- UI ---
+st.title("📂 Penentu Klasifikasi Arsip")
 st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
+
+query = st.text_area("Masukkan Perihal Surat:", placeholder="Contoh: Surat permohonan cuti...")
+
+if st.button("Cek Kode Sekarang"):
+    if not query:
+        st.warning("Isi perihal dulu!")
+    else:
+        model = start_ai()
+        if model:
+            with st.spinner("Menganalisis..."):
+                try:
+                    # Ambil sedikit sampel untuk panduan
+                    ref = df['ai_search_context'].head(20).tolist() if df is not None else ""
+                    
+                    prompt = f"Anda pakar arsip. Berdasarkan data: {ref}\n\nTentukan 3 kode klasifikasi terbaik untuk: {query}"
+                    
+                    response = model.generate_content(prompt)
+                    st.success("Hasil Analisis:")
+                    st.markdown(response.text)
+                except Exception as e:
+                    st.error(f"Terjadi Kesalahan: {e}")
+                    st.info("Catatan: Jika error 404 berlanjut, silakan lakukan REBOOT di Dashboard Streamlit.")
