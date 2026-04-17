@@ -18,23 +18,18 @@ API_KEY = st.secrets["GEMINI_API_KEY"]
 # GEMINI (GUIDED THINKING)
 # =============================
 def call_gemini(perihal):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key={API_KEY}"
 
     prompt = f"""
 Anda adalah ARSIPARIS AHLI.
 
-Gunakan cara berpikir profesional:
+Gunakan cara berpikir:
 
 1. Tentukan jenis dokumen
-2. Tentukan kegiatan utama (aksi)
-3. Tentukan objek yang diproses
-4. Rumuskan INTI (maks 5 kata)
-5. Rumuskan FUNGSI secara spesifik (contoh: "administrasi rapat koordinasi", "pengelolaan cuti pegawai")
-
-ATURAN:
-- Jangan terlalu umum (hindari: "administrasi")
-- Harus spesifik sesuai kegiatan
-- Fokus pada fungsi utama, bukan kata terakhir
+2. Tentukan aksi utama
+3. Tentukan objek
+4. Tentukan inti (maks 5 kata)
+5. Tentukan fungsi spesifik (bukan umum)
 
 PERIHAL:
 {perihal}
@@ -48,14 +43,21 @@ INTI:
 FUNGSI:
 """
 
-    data = {"contents": [{"parts": [{"text": prompt}]}]}
+    data = {
+        "contents": [
+            {"parts": [{"text": prompt}]}
+        ]
+    }
+
     res = requests.post(url, json=data)
 
     if res.status_code != 200:
         return f"❌ Error API: {res.text}"
 
-    return res.json()["candidates"][0]["content"]["parts"][0]["text"]
-
+    try:
+        return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+    except:
+        return "❌ AI tidak memberikan respon valid"
 # =============================
 # LOAD DATA
 # =============================
