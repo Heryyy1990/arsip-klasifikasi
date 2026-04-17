@@ -3,19 +3,27 @@ import pandas as pd
 import google.generativeai as genai
 import os
 
-# Konfigurasi Halaman
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# =============================
+# KONFIGURASI HALAMAN
+# =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
 
 st.title("📂 Penentu Klasifikasi Arsip")
 st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
 
-# --- 1. CEK API KEY DI SECRETS ---
+# =============================
+# CEK API KEY
+# =============================
 if "GEMINI_API_KEY" not in st.secrets:
-    st.error("❌ API Key tidak ditemukan! Buka Settings > Secrets di Streamlit, lalu masukkan: GEMINI_API_KEY = 'KUNCI_ANDA'")
+    st.error("❌ API Key tidak ditemukan!")
     st.stop()
 
-# --- 2. CEK DATA CSV ---
-# Mengecek file mana yang ada di GitHub Anda
+# =============================
+# CEK FILE CSV
+# =============================
 file_upgraded = 'klasifikasi_arsip_upgraded.csv'
 file_asli = 'klasifikasi_arsip.csv'
 
@@ -26,50 +34,117 @@ elif os.path.exists(file_asli):
     csv_file = file_asli
     st.info(f"ℹ️ Menggunakan database asli: {file_asli}")
 else:
-    st.error("❌ File CSV tidak ditemukan! Pastikan file 'klasifikasi_arsip.csv' sudah di-upload ke GitHub.")
+    st.error("❌ File CSV tidak ditemukan!")
     st.stop()
 
+# =============================
+# LOAD DATA
+# =============================
 @st.cache_data
 def load_data():
     return pd.read_csv(csv_file)
 
 df = load_data()
 
-# --- 3. INISIALISASI MODEL ---
-try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # Langsung panggil model tanpa embel-embel v1beta
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except Exception as e:
-    st.error(f"Gagal memuat AI: {e}")
-    st.stop()
+# =============================
+# PREPARE TF-IDF (LOCAL ML)
+# =============================
+@st.cache_resource
+def prepare_model(dataframe):
+    kolom = 'ai_search_context' if 'ai_search_context' in dataframe.columns else 'uraian'
+    
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(dataframe[kolom].astype(str))
+    
+    return vectorizer, tfidf_matrix, kolom
 
-# --- 4. TAMPILAN UTAMA ---
-perihal = st.text_area("✍️ Masukkan Perihal/Uraian Surat:", placeholder="Contoh: Permohonan cuti tahunan pegawai...", height=150)
+vectorizer, tfidf_matrix, search_col = prepare_model(df)
 
+# =============================
+# GEMINI SETUP
+# =============================
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# =============================
+# UI INPUT
+# =============================
+perihal = st.text_area(
+    "✍️ Masukkan Perihal/Uraian Surat:",
+    placeholder="Contoh: Permohonan cuti tahunan pegawai...",
+    height=150
+)
+
+# =============================
+# PROSES ANALISIS
+# =============================
 if st.button("Mulai Analisis"):
+
     if not perihal:
         st.warning("Mohon isi deskripsi surat dulu.")
     else:
-        with st.spinner("AI sedang menganalisis database..."):
+        with st.spinner("🔍 Menganalisis dengan Local Model..."):
+
+            # --- 1. TF-IDF Similarity ---
+            input_vec = vectorizer.transform([perihal])
+            similarity = cosine_similarity(input_vec, tfidf_matrix)
+
+            # Ambil 3 terbaik
+            top_idx = similarity[0].argsort()[-3:][::-1]
+            hasil_lokal = df.iloc[top_idx]
+
+        # =============================
+        # TAMPILKAN HASIL LOKAL
+        # =============================
+        st.subheader("📊 Rekomendasi Awal (Local Model)")
+        
+        kandidat_list = []
+
+        for i, row in hasil_lokal.iterrows():
+            kode = row.get("kode", "Tidak ada kode")
+            uraian = row.get("uraian", "Tidak ada uraian")
+            skor = similarity[0][i]
+
+            kandidat_list.append(f"{kode} - {uraian}")
+
+            st.write(f"**{kode} - {uraian}**")
+            st.caption(f"Kemiripan: {skor:.2f}")
+
+        # =============================
+        # AI ANALISIS
+        # =============================
+        with st.spinner("🤖 AI sedang memberikan analisis..."):
             try:
-                # Tentukan kolom pencarian
-                search_col = 'ai_search_context' if 'ai_search_context' in df.columns else 'uraian'
-                referensi = df[search_col].head(10).tolist()
-                
-                prompt = f"""Anda Pakar Arsiparis. Gunakan pola ini: {referensi}
-                Tentukan 3 kode klasifikasi terbaik untuk perihal: {perihal}
-                Format: KODE - URAIAN (ALASAN)"""
-                
+                prompt = f"""
+Anda adalah Arsiparis Ahli.
+
+Diberikan 3 kandidat klasifikasi arsip berikut:
+{chr(10).join(kandidat_list)}
+
+Perihal surat:
+{perihal}
+
+Tugas Anda:
+1. Jelaskan secara singkat alasan tiap kandidat relevan
+2. Pilih 1 kode terbaik
+3. Berikan alasan paling kuat
+
+Format:
+1. KODE - PENJELASAN
+2. KODE - PENJELASAN
+3. KODE - PENJELASAN
+
+REKOMENDASI UTAMA:
+KODE TERPILIH - ALASAN
+"""
+
                 response = model.generate_content(prompt)
-                st.success("🎯 Rekomendasi AI:")
+
+                st.subheader("🎯 Analisis AI")
                 st.markdown(response.text)
-                
+
             except Exception as e:
-                # Jika masih error 404, tampilkan instruksi debug yang tegas
-                st.error(f"Analisis Gagal: {e}")
-                if "404" in str(e):
-                    st.info("⚠️ **SOLUSI TERAKHIR:** Masalah 404 v1beta berarti server Streamlit memakai library lama. Silakan masuk ke Dashboard Streamlit, klik tanda '...' di sebelah aplikasi Anda, pilih 'Delete', lalu 'New App' (Deploy ulang dari nol). Itu akan menghapus total semua error lama.")
+                st.error(f"AI Error: {e}")
 
 st.divider()
 st.caption("Dikembangkan untuk Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat.")
