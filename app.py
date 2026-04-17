@@ -31,7 +31,7 @@ def load_data():
     if os.path.exists("klasifikasi_arsip_optimized.csv"):
         return pd.read_csv("klasifikasi_arsip_upgraded.csv")
     else:
-        return pd.read_csv("klasifikasi_arsip.csv")
+        return pd.read_csv("klasifikasi_arsip_upgraded.csv")
 
 df = load_data()
 
