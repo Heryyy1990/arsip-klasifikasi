@@ -12,8 +12,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
 
-st.title("📂 Penentu Klasifikasi Arsip (Generik + Smart Extractor)")
-st.caption("Inti + Keyword + Embedding + AI")
+st.title("📂 Penentu Klasifikasi Arsip (Versi Stabil)")
+st.caption("Smart Extractor + Embedding + AI")
 
 # =============================
 # API KEY
@@ -43,43 +43,49 @@ df = load_data()
 # =============================
 def clean_text(text):
     text = str(text).lower()
-    text = re.sub(r'[^a-zA-Z0-9\s]', ' ', text)
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
     return text
 
 # =============================
-# EKSTRAK INTI (LAMA - TETAP DIPAKAI)
+# 🔥 EXTRACTOR BARU (LEBIH TAJAM)
 # =============================
 def extract_inti(text):
     text = text.lower()
 
+    # hapus kalimat pembuka
     noise = [
-        "berita acara", "surat", "dokumen", "laporan",
-        "permohonan", "undangan", "nota dinas",
-        "hasil", "tentang", "perihal"
+        "dengan ini", "saya", "mengajukan", "permohonan",
+        "untuk", "melakukan", "dalam rangka",
+        "melengkapi", "persyaratan"
     ]
 
     for n in noise:
         text = text.replace(n, "")
 
-    return text.strip()
-
-# =============================
-# 🔥 EKSTRAK KEYWORD BARU (UNTUK KALIMAT PANJANG)
-# =============================
-def extract_keyword(text):
-    text = text.lower()
-
-    stopwords = [
-        "dengan", "ini", "saya", "mengajukan", "untuk",
-        "melakukan", "dalam", "rangka", "agar",
-        "sebagai", "berikut", "tersebut"
-    ]
-
     words = text.split()
-    words = [w for w in words if w not in stopwords]
 
-    # ambil kata penting saja (max 5 kata terakhir biasanya inti)
-    return " ".join(words[-5:])
+    # ambil kata paling akhir (biasanya inti)
+    if len(words) > 3:
+        words = words[-3:]
+
+    return " ".join(words)
+
+# =============================
+# 🔥 BOOST KATA PENTING (GENERIK)
+# =============================
+def boost_query(text):
+    boost = []
+
+    if "pindah" in text:
+        boost.append("pegawai mutasi")
+
+    if "cuti" in text:
+        boost.append("pegawai cuti")
+
+    if "arsip" in text:
+        boost.append("kearsipan arsip")
+
+    return text + " " + " ".join(boost)
 
 # =============================
 # PILIH KOLOM
@@ -89,10 +95,8 @@ def get_search_column(dataframe):
         return dataframe["ai_context_final"]
     elif "ai_search_context" in dataframe.columns:
         return dataframe["ai_search_context"]
-    elif "uraian" in dataframe.columns:
-        return dataframe["uraian"]
     else:
-        return dataframe.iloc[:, 0]
+        return dataframe["uraian"]
 
 df["search_text"] = get_search_column(df).apply(clean_text)
 
@@ -117,15 +121,14 @@ if st.button("Analisis"):
         st.stop()
 
     # =============================
-    # EKSTRAK INTI + KEYWORD
+    # EXTRACT INTI
     # =============================
     inti = extract_inti(perihal)
-    keyword = extract_keyword(perihal)
-
-    final_query = clean_text(inti + " " + keyword)
+    final_query = boost_query(inti)
+    final_query = clean_text(final_query)
 
     st.info(f"🧠 Inti: {inti}")
-    st.info(f"🔑 Keyword: {keyword}")
+    st.info(f"🚀 Query akhir: {final_query}")
 
     # =============================
     # EMBEDDING
@@ -160,12 +163,9 @@ if st.button("Analisis"):
         st.caption(f"Similarity: {skor:.3f}")
 
     # =============================
-    # AI (FIX MODEL ERROR)
+    # AI (FIX TOTAL)
     # =============================
-    try:
-        model_ai = genai.GenerativeModel('gemini-1.5-flash-latest')
-    except:
-        model_ai = genai.GenerativeModel('gemini-pro')
+    model_ai = genai.GenerativeModel("gemini-pro")
 
     with st.spinner("🤖 AI menganalisis..."):
         try:
@@ -175,23 +175,17 @@ Anda adalah Arsiparis Ahli.
 Inti:
 {inti}
 
-Keyword:
-{keyword}
-
 Kandidat:
 {chr(10).join(kandidat_list)}
 
-Tugas:
-- Analisis tiap kandidat
-- Bandingkan
-- Pilih 1 terbaik
-
-Gunakan:
+Pilih 1 yang paling tepat berdasarkan:
 - fungsi kegiatan
 - objek arsip
 
-REKOMENDASI:
-KODE
+Jawaban:
+
+KODE:
+...
 
 ALASAN:
 jelaskan logis dan spesifik
@@ -206,4 +200,4 @@ jelaskan logis dan spesifik
             st.error(f"AI Error: {e}")
 
 st.divider()
-st.caption("Versi Smart Extractor + Stabil AI")
+st.caption("Versi Stabil + Extractor Lebih Tajam + Gemini Fix")
