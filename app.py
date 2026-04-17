@@ -37,7 +37,7 @@ def load_data():
 df = load_data()
 
 # =============================
-# CLEAN TEXT (ANTI ERROR)
+# CLEAN TEXT
 # =============================
 def clean_text(text):
     text = str(text).lower()
@@ -45,7 +45,7 @@ def clean_text(text):
     return text
 
 # =============================
-# PILIH KOLOM TERBAIK OTOMATIS
+# PILIH KOLOM
 # =============================
 def get_search_column(dataframe):
     if "ai_context_final" in dataframe.columns:
@@ -55,12 +55,12 @@ def get_search_column(dataframe):
     elif "uraian" in dataframe.columns:
         return dataframe["uraian"]
     else:
-        return dataframe.iloc[:, 0]  # fallback kolom pertama
+        return dataframe.iloc[:, 0]
 
 df["search_text"] = get_search_column(df).apply(clean_text)
 
 # =============================
-# LOAD EMBEDDING
+# EMBEDDING MODEL
 # =============================
 @st.cache_resource
 def load_model():
@@ -68,12 +68,8 @@ def load_model():
 
 model_embed = load_model()
 
-@st.cache_resource
-def encode_data(data):
-    return model_embed.encode(data.tolist(), show_progress_bar=False)
-
 # =============================
-# DETEKSI KODE (RULE BASED)
+# DETEKSI KODE
 # =============================
 def detect_kode(perihal):
     p = perihal.lower()
@@ -99,44 +95,48 @@ if st.button("Analisis"):
         st.stop()
 
     # =============================
-    # FILTER DATA
+    # FILTER
     # =============================
     kode_filter = detect_kode(perihal)
 
     if kode_filter:
-        df_filtered = df[df["kode"].astype(str).str.startswith(kode_filter)]
+        df_filtered = df[df["kode"].astype(str).str.startswith(kode_filter)].reset_index(drop=True)
         st.info(f"🔎 Difilter ke kode {kode_filter}")
     else:
-        df_filtered = df
-        st.warning("⚠️ Tidak terdeteksi kode, gunakan semua data")
+        df_filtered = df.reset_index(drop=True)
+        st.warning("⚠️ Tidak terdeteksi kode")
 
     if df_filtered.empty:
-        st.error("❌ Data kosong setelah filter!")
+        st.error("❌ Data kosong setelah filter")
         st.stop()
 
     # =============================
     # EMBEDDING
     # =============================
-    texts = df_filtered["search_text"]
-    embeddings = encode_data(texts)
+    texts = df_filtered["search_text"].astype(str).tolist()
+    embeddings = model_embed.encode(texts, show_progress_bar=False)
 
     input_vec = model_embed.encode([perihal])
     sim = cosine_similarity(input_vec, embeddings)
 
-    top_idx = sim[0].argsort()[-3:][::-1]
-    hasil = df_filtered.iloc[top_idx]
+    # ambil top 3 posisi (bukan index asli!)
+    top_pos = sim[0].argsort()[-3:][::-1]
+
+    hasil = df_filtered.iloc[top_pos]
 
     # =============================
-    # TAMPILKAN HASIL
+    # TAMPILKAN
     # =============================
     st.subheader("📊 Rekomendasi Awal")
 
     kandidat_list = []
 
-    for i, row in hasil.iterrows():
+    for rank, pos in enumerate(top_pos):
+        row = df_filtered.iloc[pos]
+
         kode = row.get("kode", "-")
         uraian = row.get("uraian", "-")
-        skor = sim[0][i]
+        skor = sim[0][pos]
 
         teks = f"{kode} - {uraian}"
         kandidat_list.append(teks)
@@ -145,7 +145,7 @@ if st.button("Analisis"):
         st.caption(f"Similarity: {skor:.3f}")
 
     # =============================
-    # AI ANALISIS (DIPERKUAT)
+    # AI
     # =============================
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model_ai = genai.GenerativeModel('gemini-1.5-flash')
@@ -155,18 +155,18 @@ if st.button("Analisis"):
             prompt = f"""
 Anda adalah Arsiparis Ahli.
 
-Diberikan 3 kandidat klasifikasi:
+Diberikan kandidat:
 {chr(10).join(kandidat_list)}
 
 Perihal:
 {perihal}
 
-Lakukan:
-1. Jelaskan relevansi tiap kandidat
-2. Bandingkan perbedaan
+Analisis:
+1. Jelaskan relevansi masing-masing
+2. Bandingkan
 3. Pilih 1 terbaik
 
-Gunakan logika:
+Gunakan:
 - fungsi kegiatan
 - objek arsip
 - konteks administrasi
@@ -197,4 +197,4 @@ jelaskan paling logis dan spesifik
             st.error(f"AI Error: {e}")
 
 st.divider()
-st.caption("Versi Stabil Anti Error + Smart Filtering")
+st.caption("Versi Stabil (Index Fix + Filtering + Embedding)")
