@@ -3,4 +3,4 @@ pandas
 scikit-learn
 sentence-transformers
 torch
-requests
+google-generativeai
