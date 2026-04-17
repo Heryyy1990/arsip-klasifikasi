@@ -3,7 +3,7 @@ import pandas as pd
 import google.generativeai as genai
 import os
 
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # =============================
@@ -11,7 +11,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
 
-st.title("📂 Penentu Klasifikasi Arsip")
+st.title("📂 Penentu Klasifikasi Arsip (Embedding + AI)")
 st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
 
 # =============================
@@ -24,15 +24,19 @@ if "GEMINI_API_KEY" not in st.secrets:
 # =============================
 # CEK FILE CSV
 # =============================
+file_optimized = 'klasifikasi_arsip_optimized.csv'
 file_upgraded = 'klasifikasi_arsip_upgraded.csv'
 file_asli = 'klasifikasi_arsip.csv'
 
-if os.path.exists(file_upgraded):
+if os.path.exists(file_optimized):
+    csv_file = file_optimized
+    st.success(f"✅ Menggunakan database terbaik: {file_optimized}")
+elif os.path.exists(file_upgraded):
     csv_file = file_upgraded
-    st.success(f"✅ Menggunakan database: {file_upgraded}")
+    st.info(f"ℹ️ Menggunakan database upgraded")
 elif os.path.exists(file_asli):
     csv_file = file_asli
-    st.info(f"ℹ️ Menggunakan database asli: {file_asli}")
+    st.warning(f"⚠️ Menggunakan database dasar")
 else:
     st.error("❌ File CSV tidak ditemukan!")
     st.stop()
@@ -47,27 +51,34 @@ def load_data():
 df = load_data()
 
 # =============================
-# PREPARE TF-IDF (LOCAL ML)
+# LOAD EMBEDDING MODEL
 # =============================
 @st.cache_resource
-def prepare_model(dataframe):
-    kolom = 'ai_search_context' if 'ai_search_context' in dataframe.columns else 'uraian'
-    
-    vectorizer = TfidfVectorizer()
-    tfidf_matrix = vectorizer.fit_transform(dataframe[kolom].astype(str))
-    
-    return vectorizer, tfidf_matrix, kolom
+def load_embedding():
+    return SentenceTransformer('all-MiniLM-L6-v2')
 
-vectorizer, tfidf_matrix, search_col = prepare_model(df)
+embed_model = load_embedding()
+
+# =============================
+# PREPARE EMBEDDING DATABASE
+# =============================
+@st.cache_resource
+def prepare_embeddings(dataframe):
+    kolom = 'ai_context_final' if 'ai_context_final' in dataframe.columns else 'uraian'
+    texts = dataframe[kolom].astype(str).tolist()
+    embeddings = embed_model.encode(texts, show_progress_bar=False)
+    return embeddings, kolom
+
+embeddings_db, search_col = prepare_embeddings(df)
 
 # =============================
 # GEMINI SETUP
 # =============================
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
+model_ai = genai.GenerativeModel('gemini-1.5-flash')
 
 # =============================
-# UI INPUT
+# INPUT USER
 # =============================
 perihal = st.text_area(
     "✍️ Masukkan Perihal/Uraian Surat:",
@@ -76,31 +87,30 @@ perihal = st.text_area(
 )
 
 # =============================
-# PROSES ANALISIS
+# PROSES
 # =============================
 if st.button("Mulai Analisis"):
 
     if not perihal:
         st.warning("Mohon isi deskripsi surat dulu.")
     else:
-        with st.spinner("🔍 Menganalisis dengan Local Model..."):
 
-            # --- 1. TF-IDF Similarity ---
-            input_vec = vectorizer.transform([perihal])
-            similarity = cosine_similarity(input_vec, tfidf_matrix)
+        with st.spinner("🔍 Mencari dengan Embedding..."):
 
-            # Ambil 3 terbaik
+            input_embedding = embed_model.encode([perihal])
+            similarity = cosine_similarity(input_embedding, embeddings_db)
+
             top_idx = similarity[0].argsort()[-3:][::-1]
-            hasil_lokal = df.iloc[top_idx]
+            hasil = df.iloc[top_idx]
 
         # =============================
-        # TAMPILKAN HASIL LOKAL
+        # HASIL EMBEDDING
         # =============================
-        st.subheader("📊 Rekomendasi Awal (Local Model)")
-        
+        st.subheader("📊 Rekomendasi Awal (Embedding)")
+
         kandidat_list = []
 
-        for i, row in hasil_lokal.iterrows():
+        for i, row in hasil.iterrows():
             kode = row.get("kode", "Tidak ada kode")
             uraian = row.get("uraian", "Tidak ada uraian")
             skor = similarity[0][i]
@@ -108,43 +118,63 @@ if st.button("Mulai Analisis"):
             kandidat_list.append(f"{kode} - {uraian}")
 
             st.write(f"**{kode} - {uraian}**")
-            st.caption(f"Kemiripan: {skor:.2f}")
+            st.caption(f"Similarity: {skor:.3f}")
 
         # =============================
-        # AI ANALISIS
+        # AI ANALISIS (VERSI DIPERKUAT)
         # =============================
-        with st.spinner("🤖 AI sedang memberikan analisis..."):
+        with st.spinner("🤖 AI sedang menganalisis..."):
             try:
                 prompt = f"""
-Anda adalah Arsiparis Ahli.
+Anda adalah Arsiparis Ahli di lingkungan pemerintah daerah.
 
-Diberikan 3 kandidat klasifikasi arsip berikut:
+Diberikan 3 kandidat klasifikasi arsip:
 {chr(10).join(kandidat_list)}
 
 Perihal surat:
 {perihal}
 
-Tugas Anda:
-1. Jelaskan secara singkat alasan tiap kandidat relevan
-2. Pilih 1 kode terbaik
-3. Berikan alasan paling kuat
+Lakukan analisis sebagai berikut:
+
+1. Jelaskan relevansi masing-masing kandidat terhadap perihal
+2. Bandingkan perbedaan fokus antar kandidat
+3. Tentukan 1 kode klasifikasi yang PALING TEPAT
+
+Gunakan pendekatan:
+- fungsi kegiatan
+- objek arsip
+- konteks administrasi
+
+Hindari jawaban umum.
 
 Format:
-1. KODE - PENJELASAN
-2. KODE - PENJELASAN
-3. KODE - PENJELASAN
+
+ANALISIS KANDIDAT:
+
+1. KODE - PENJELASAN SPESIFIK
+2. KODE - PENJELASAN SPESIFIK
+3. KODE - PENJELASAN SPESIFIK
+
+PERBANDINGAN:
+Jelaskan perbedaan fokus masing-masing kandidat
 
 REKOMENDASI UTAMA:
-KODE TERPILIH - ALASAN
+KODE TERPILIH
+
+ALASAN:
+Jelaskan secara logis:
+- kegiatan apa
+- objek apa
+- kenapa paling tepat dibanding lainnya
 """
 
-                response = model.generate_content(prompt)
+                response = model_ai.generate_content(prompt)
 
-                st.subheader("🎯 Analisis AI")
+                st.subheader("🎯 Analisis AI (Final)")
                 st.markdown(response.text)
 
             except Exception as e:
                 st.error(f"AI Error: {e}")
 
 st.divider()
-st.caption("Dikembangkan untuk Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat.")
+st.caption("Sistem Hybrid: Embedding + AI Reasoning")
