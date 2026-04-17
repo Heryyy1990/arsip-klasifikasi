@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
 import re
-import requests
+
+import google.generativeai as genai
+
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -9,27 +11,35 @@ from sklearn.metrics.pairwise import cosine_similarity
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-st.title("📂 Penentu Klasifikasi Arsip (AI Natural Thinking)")
-st.caption("AI berpikir seperti arsiparis (tanpa daftar kaku)")
-
-API_KEY = st.secrets["GEMINI_API_KEY"]
+st.title("📂 Penentu Klasifikasi Arsip (Fix 404)")
+st.caption("AI stabil + tidak error model")
 
 # =============================
-# GEMINI (GUIDED THINKING)
+# API CONFIG (RESMI)
 # =============================
-def call_gemini(perihal):
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.0-pro:generateContent?key={API_KEY}"
+if "GEMINI_API_KEY" not in st.secrets:
+    st.error("API Key tidak ditemukan")
+    st.stop()
 
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
+# 🔥 MODEL PALING AMAN
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+# =============================
+# AI FUNCTION (ARSIPARIS LOGIC)
+# =============================
+def analyze_with_ai(perihal):
     prompt = f"""
 Anda adalah ARSIPARIS AHLI.
 
-Gunakan cara berpikir:
+Gunakan langkah berpikir:
 
 1. Tentukan jenis dokumen
 2. Tentukan aksi utama
 3. Tentukan objek
 4. Tentukan inti (maks 5 kata)
-5. Tentukan fungsi spesifik (bukan umum)
+5. Tentukan fungsi spesifik (jangan umum)
 
 PERIHAL:
 {perihal}
@@ -43,21 +53,12 @@ INTI:
 FUNGSI:
 """
 
-    data = {
-        "contents": [
-            {"parts": [{"text": prompt}]}
-        ]
-    }
-
-    res = requests.post(url, json=data)
-
-    if res.status_code != 200:
-        return f"❌ Error API: {res.text}"
-
     try:
-        return res.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except:
-        return "❌ AI tidak memberikan respon valid"
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ AI Error: {e}"
+
 # =============================
 # LOAD DATA
 # =============================
@@ -79,7 +80,7 @@ df["search"] = df["uraian"].apply(clean)
 def load_model():
     return SentenceTransformer('all-MiniLM-L6-v2')
 
-model = load_model()
+embed_model = load_model()
 
 # =============================
 # INPUT
@@ -95,10 +96,10 @@ if st.button("Analisis"):
     # =============================
     # AI ANALISIS
     # =============================
-    with st.spinner("🧠 AI memahami seperti arsiparis..."):
-        hasil = call_gemini(perihal)
+    with st.spinner("🧠 AI memahami isi surat..."):
+        hasil = analyze_with_ai(perihal)
 
-    if "Error API" in hasil:
+    if "Error" in hasil:
         st.error(hasil)
         st.stop()
 
@@ -123,9 +124,9 @@ if st.button("Analisis"):
     # LOCAL MATCHING
     # =============================
     texts = df["search"].tolist()
-    emb = model.encode(texts, show_progress_bar=False)
+    emb = embed_model.encode(texts, show_progress_bar=False)
 
-    sim = cosine_similarity(model.encode([query]), emb)[0]
+    sim = cosine_similarity(embed_model.encode([query]), emb)[0]
 
     df["score"] = sim
     top = df.sort_values(by="score", ascending=False).head(5)
@@ -137,4 +138,4 @@ if st.button("Analisis"):
         st.caption(f"Score: {r['score']:.3f}")
 
 st.divider()
-st.caption("AI Natural Thinking - Tanpa daftar fungsi")
+st.caption("Versi Stabil Tanpa Error 404")
