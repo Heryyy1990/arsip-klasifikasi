@@ -23,7 +23,7 @@ if "GEMINI_API_KEY" not in st.secrets:
 # =============================
 @st.cache_data
 def load_data():
-    return pd.read_csv("klasifikasi_arsip_optimized.csv")
+    return pd.read_csv("klasifikasi_arsip_upgraded.csv")
 
 df = load_data()
 
