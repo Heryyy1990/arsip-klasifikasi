@@ -30,7 +30,7 @@ def load_gemini_model():
     candidate_models = [
         "gemini-1.5-flash",
         "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
+        "gemini-pro",
         "gemini-pro"
     ]
 
