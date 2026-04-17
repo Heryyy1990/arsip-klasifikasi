@@ -11,8 +11,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-st.title("📂 Penentu Klasifikasi Arsip (Next Level)")
-st.caption("Function-Based Ranking + AI")
+st.title("📂 Penentu Klasifikasi Arsip (Level ANRI)")
+st.caption("Multi-Function + Hybrid Ranking + AI")
 
 # =============================
 # API KEY
@@ -20,6 +20,8 @@ st.caption("Function-Based Ranking + AI")
 if "GEMINI_API_KEY" not in st.secrets:
     st.error("❌ API Key tidak ditemukan!")
     st.stop()
+
+API_KEY = st.secrets["GEMINI_API_KEY"]
 
 # =============================
 # LOAD DATA
@@ -65,32 +67,39 @@ def extract_inti(text):
     return " ".join(words)
 
 # =============================
-# 🔥 FUNCTION DETECTOR (KUNCI)
+# 🔥 MULTI FUNCTION DETECTOR
 # =============================
-def detect_function(text):
+def detect_functions(text):
+    fungsi = []
+
     if "pindah" in text or "mutasi" in text:
-        return "mutasi pegawai"
-    elif "cuti" in text:
-        return "cuti pegawai"
-    elif "pensiun" in text:
-        return "pensiun pegawai"
-    elif "arsip" in text:
-        return "kearsipan arsip"
-    else:
-        return ""
+        fungsi.append("mutasi pegawai")
+
+    if "cuti" in text:
+        fungsi.append("cuti pegawai")
+
+    if "pensiun" in text:
+        fungsi.append("pensiun pegawai")
+
+    if "berkas" in text or "administrasi" in text:
+        fungsi.append("administrasi kepegawaian")
+
+    if "arsip" in text:
+        fungsi.append("kearsipan arsip")
+
+    return fungsi
 
 # =============================
 # BUILD QUERY
 # =============================
-def build_query(inti):
-    fungsi = detect_function(inti)
-
+def build_query(inti, fungsi_list):
     query = inti
 
     if "berkas" in query:
         query = query.replace("berkas", "")
 
-    query = query + " " + fungsi
+    for f in fungsi_list:
+        query += " " + f
 
     return clean_text(query)
 
@@ -135,10 +144,10 @@ def calculate_score(query, text, semantic_score):
     return (semantic_score * 0.6) + (keyword_score * 0.25) + (domain_score * 0.15)
 
 # =============================
-# GEMINI API
+# 🔥 GEMINI FIX TOTAL
 # =============================
 def call_gemini(prompt, api_key):
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={api_key}"
 
     headers = {"Content-Type": "application/json"}
 
@@ -166,11 +175,11 @@ if st.button("Analisis"):
         st.stop()
 
     inti = extract_inti(perihal)
-    fungsi = detect_function(inti)
-    query = build_query(inti)
+    fungsi_list = detect_functions(inti)
+    query = build_query(inti, fungsi_list)
 
     st.info(f"🧠 Inti: {inti}")
-    st.info(f"🎯 Fungsi: {fungsi}")
+    st.info(f"🎯 Fungsi: {', '.join(fungsi_list)}")
     st.info(f"🚀 Query: {query}")
 
     texts = df["search_text"].tolist()
@@ -201,15 +210,15 @@ if st.button("Analisis"):
         st.caption(f"Score: {row['final_score']:.3f}")
 
     # =============================
-    # GEMINI (TETAP ADA)
+    # GEMINI
     # =============================
     with st.spinner("🤖 AI menganalisis..."):
 
         prompt = f"""
 Anda arsiparis ahli.
 
-Fungsi kegiatan:
-{fungsi}
+Fungsi:
+{', '.join(fungsi_list)}
 
 Kandidat:
 {chr(10).join(kandidat_list)}
@@ -220,13 +229,13 @@ KODE:
 ...
 
 ALASAN:
-jelaskan berbasis fungsi
+jelaskan berbasis fungsi arsip
 """
 
-        hasil_ai = call_gemini(prompt, st.secrets["GEMINI_API_KEY"])
+        hasil_ai = call_gemini(prompt, API_KEY)
 
         st.subheader("🎯 Hasil AI")
         st.write(hasil_ai)
 
 st.divider()
-st.caption("Versi Next Level (Function-Based)")
+st.caption("Versi Level ANRI - Multi Function + Gemini Fix")
