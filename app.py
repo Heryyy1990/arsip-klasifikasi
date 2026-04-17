@@ -12,8 +12,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
 
-st.title("📂 Penentu Klasifikasi Arsip (Generik)")
-st.caption("Berbasis Inti Kegiatan + Embedding + AI")
+st.title("📂 Penentu Klasifikasi Arsip (Generik + Smart Extractor)")
+st.caption("Inti + Keyword + Embedding + AI")
 
 # =============================
 # API KEY
@@ -21,6 +21,8 @@ st.caption("Berbasis Inti Kegiatan + Embedding + AI")
 if "GEMINI_API_KEY" not in st.secrets:
     st.error("❌ API Key tidak ditemukan!")
     st.stop()
+
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # =============================
 # LOAD DATA
@@ -45,7 +47,7 @@ def clean_text(text):
     return text
 
 # =============================
-# EKSTRAK INTI KEGIATAN (GENERIK)
+# EKSTRAK INTI (LAMA - TETAP DIPAKAI)
 # =============================
 def extract_inti(text):
     text = text.lower()
@@ -60,6 +62,24 @@ def extract_inti(text):
         text = text.replace(n, "")
 
     return text.strip()
+
+# =============================
+# 🔥 EKSTRAK KEYWORD BARU (UNTUK KALIMAT PANJANG)
+# =============================
+def extract_keyword(text):
+    text = text.lower()
+
+    stopwords = [
+        "dengan", "ini", "saya", "mengajukan", "untuk",
+        "melakukan", "dalam", "rangka", "agar",
+        "sebagai", "berikut", "tersebut"
+    ]
+
+    words = text.split()
+    words = [w for w in words if w not in stopwords]
+
+    # ambil kata penting saja (max 5 kata terakhir biasanya inti)
+    return " ".join(words[-5:])
 
 # =============================
 # PILIH KOLOM
@@ -97,27 +117,30 @@ if st.button("Analisis"):
         st.stop()
 
     # =============================
-    # EKSTRAK INTI
+    # EKSTRAK INTI + KEYWORD
     # =============================
     inti = extract_inti(perihal)
-    inti = clean_text(inti)
+    keyword = extract_keyword(perihal)
 
-    st.info(f"🧠 Inti terdeteksi: {inti}")
+    final_query = clean_text(inti + " " + keyword)
+
+    st.info(f"🧠 Inti: {inti}")
+    st.info(f"🔑 Keyword: {keyword}")
 
     # =============================
-    # EMBEDDING KE SEMUA DATA
+    # EMBEDDING
     # =============================
     texts = df["search_text"].astype(str).tolist()
     embeddings = model_embed.encode(texts, show_progress_bar=False)
 
-    input_vec = model_embed.encode([inti])
+    input_vec = model_embed.encode([final_query])
     sim = cosine_similarity(input_vec, embeddings)
 
     top_pos = sim[0].argsort()[-5:][::-1]
     hasil = df.iloc[top_pos]
 
     # =============================
-    # TAMPILKAN HASIL
+    # TAMPILKAN
     # =============================
     st.subheader("📊 Rekomendasi Awal")
 
@@ -137,53 +160,41 @@ if st.button("Analisis"):
         st.caption(f"Similarity: {skor:.3f}")
 
     # =============================
-    # AI ANALISIS (WAJIB LOGIS)
+    # AI (FIX MODEL ERROR)
     # =============================
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    model_ai = genai.GenerativeModel('gemini-1.5-flash')
+    try:
+        model_ai = genai.GenerativeModel('gemini-1.5-flash-latest')
+    except:
+        model_ai = genai.GenerativeModel('gemini-pro')
 
     with st.spinner("🤖 AI menganalisis..."):
         try:
             prompt = f"""
 Anda adalah Arsiparis Ahli.
 
-Inti perihal:
+Inti:
 {inti}
 
-Kandidat klasifikasi:
+Keyword:
+{keyword}
+
+Kandidat:
 {chr(10).join(kandidat_list)}
 
 Tugas:
-1. Analisis tiap kandidat berdasarkan kegiatan arsip
-2. Bandingkan fokusnya
-3. Pilih 1 paling tepat
+- Analisis tiap kandidat
+- Bandingkan
+- Pilih 1 terbaik
 
-Gunakan logika:
+Gunakan:
 - fungsi kegiatan
 - objek arsip
-- konteks administrasi
-
-JANGAN:
-- menjawab umum
-- hanya berdasarkan kemiripan kata
-
-Format:
-
-ANALISIS:
-1. ...
-2. ...
-3. ...
-4. ...
-5. ...
-
-PERBANDINGAN:
-...
 
 REKOMENDASI:
 KODE
 
 ALASAN:
-jelaskan paling logis dan spesifik
+jelaskan logis dan spesifik
 """
 
             res = model_ai.generate_content(prompt)
@@ -195,4 +206,4 @@ jelaskan paling logis dan spesifik
             st.error(f"AI Error: {e}")
 
 st.divider()
-st.caption("Versi Generik (Tanpa Rule Manual, Full Semantic)")
+st.caption("Versi Smart Extractor + Stabil AI")
