@@ -1,15 +1,16 @@
 import streamlit as st
 import pandas as pd
 import re
-from sentence_transformers import SentenceTransformer
+
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from sklearn.metrics.pairwise import cosine_similarity
 
 # =============================
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-st.title("📂 Penentu Klasifikasi Arsip (FINAL ENGINE)")
-st.caption("Multi Scoring: Semantic + Keyword + Domain")
+st.title("📂 Penentu Klasifikasi Arsip (Cross-Encoder PRO)")
+st.caption("Stage 1: Retrieval | Stage 2: Reranking")
 
 # =============================
 # LOAD DATA
@@ -26,71 +27,48 @@ def clean(text):
 df["search"] = df["uraian"].apply(clean)
 
 # =============================
-# STOPWORDS
+# PREPROCESS
 # =============================
-STOPWORDS = [
-    "yang","dan","dengan","tentang","untuk","dari","ini",
-    "tahun","kepada","sehubungan","dalam"
-]
+STOPWORDS = ["yang","dan","dengan","tentang","untuk","dari","ini"]
 
 def preprocess(text):
     words = clean(text).split()
     return [w for w in words if w not in STOPWORDS]
 
-# =============================
-# NORMALISASI
-# =============================
 SYNONYM = {
     "pindah": "mutasi",
-    "berkas": "",
-    "permohonan": "pengajuan",
-    "surat": "",
+    "permohonan": "pengajuan"
 }
 
 def normalize(words):
     return [SYNONYM.get(w, w) for w in words]
 
-# =============================
-# EKSTRAK INTI
-# =============================
 def extract_intent(text):
     words = normalize(preprocess(text))
     return " ".join(words)
 
 # =============================
-# DOMAIN DETECTION
+# DOMAIN
 # =============================
-def predict_domain(query):
-    if any(k in query for k in ["pegawai","mutasi","cuti","pensiun"]):
+def predict_domain(q):
+    if any(k in q for k in ["pegawai","mutasi","cuti"]):
         return "800"
-    if any(k in query for k in ["arsip","pemusnahan","retensi"]):
+    if "arsip" in q:
         return "000"
-    if any(k in query for k in ["anggaran","keuangan","dana"]):
+    if "anggaran" in q:
         return "900"
-    if "rapat" in query:
-        return "000"
     return None
 
 # =============================
-# KEYWORD SCORE
-# =============================
-def keyword_score(query, text):
-    q_words = set(query.split())
-    t_words = set(text.split())
-
-    if not q_words:
-        return 0
-
-    return len(q_words & t_words) / len(q_words)
-
-# =============================
-# EMBEDDING
+# MODELS
 # =============================
 @st.cache_resource
-def load_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+def load_models():
+    embed = SentenceTransformer('all-MiniLM-L6-v2')
+    cross = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    return embed, cross
 
-model = load_model()
+embed_model, cross_model = load_models()
 
 # =============================
 # INPUT
@@ -116,68 +94,56 @@ if st.button("Analisis"):
     # =============================
     domain = predict_domain(inti)
 
-    st.subheader("🎯 Domain")
-    st.write(domain if domain else "Semua")
-
-    # =============================
-    # FILTER DATA
-    # =============================
     if domain:
         df_filtered = df[df["kode"].astype(str).str.startswith(domain)].copy()
     else:
         df_filtered = df.copy()
 
     # =============================
-    # SEMANTIC SCORE
+    # STAGE 1 (RETRIEVAL)
     # =============================
     texts = df_filtered["search"].tolist()
-    embeddings = model.encode(texts, show_progress_bar=False)
+    emb = embed_model.encode(texts, show_progress_bar=False)
 
-    semantic_scores = cosine_similarity(
-        model.encode([inti]), embeddings
+    sim = cosine_similarity(
+        embed_model.encode([inti]),
+        emb
     )[0]
 
-    df_filtered["semantic"] = semantic_scores
+    df_filtered["semantic"] = sim
+
+    # ambil top 30 kandidat
+    candidates = df_filtered.sort_values(by="semantic", ascending=False).head(30).copy()
 
     # =============================
-    # KEYWORD SCORE
+    # STAGE 2 (CROSS-ENCODER)
     # =============================
-    df_filtered["keyword"] = df_filtered["search"].apply(
-        lambda x: keyword_score(inti, x)
-    )
+    pairs = [(inti, row["uraian"]) for _, row in candidates.iterrows()]
+    scores = cross_model.predict(pairs)
 
-    # =============================
-    # DOMAIN BOOST
-    # =============================
-    def domain_boost(kode):
-        if not domain:
-            return 0
-        return 1 if str(kode).startswith(domain) else 0
-
-    df_filtered["domain_boost"] = df_filtered["kode"].apply(domain_boost)
+    candidates["cross_score"] = scores
 
     # =============================
     # FINAL SCORE
     # =============================
-    df_filtered["final_score"] = (
-        df_filtered["semantic"] * 0.6 +
-        df_filtered["keyword"] * 0.25 +
-        df_filtered["domain_boost"] * 0.15
+    candidates["final_score"] = (
+        candidates["semantic"] * 0.4 +
+        candidates["cross_score"] * 0.6
     )
 
-    # =============================
-    # HASIL
-    # =============================
-    top = df_filtered.sort_values(by="final_score", ascending=False).head(5)
+    top = candidates.sort_values(by="final_score", ascending=False).head(5)
 
+    # =============================
+    # OUTPUT
+    # =============================
     st.subheader("📊 Rekomendasi Kode")
 
     for _, r in top.iterrows():
         st.write(f"**{r['kode']} - {r['uraian']}**")
         st.caption(
             f"Final: {r['final_score']:.3f} | "
-            f"S:{r['semantic']:.2f} K:{r['keyword']:.2f} D:{r['domain_boost']}"
+            f"S:{r['semantic']:.2f} CE:{r['cross_score']:.2f}"
         )
 
 st.divider()
-st.caption("FINAL ENGINE - Multi Scoring System")
+st.caption("Engine: Two-Stage Retrieval + Cross Encoder")
