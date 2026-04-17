@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-import google.generativeai as genai
 import os
 import re
+import requests
 
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -11,9 +11,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-
-st.title("📂 Penentu Klasifikasi Arsip (Versi Stabil)")
-st.caption("Smart Extractor + Embedding + AI")
+st.title("📂 Penentu Klasifikasi Arsip (Next Level)")
+st.caption("Function-Based Ranking + AI")
 
 # =============================
 # API KEY
@@ -21,8 +20,6 @@ st.caption("Smart Extractor + Embedding + AI")
 if "GEMINI_API_KEY" not in st.secrets:
     st.error("❌ API Key tidak ditemukan!")
     st.stop()
-
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 # =============================
 # LOAD DATA
@@ -39,7 +36,7 @@ def load_data():
 df = load_data()
 
 # =============================
-# CLEAN TEXT
+# CLEAN
 # =============================
 def clean_text(text):
     text = str(text).lower()
@@ -47,12 +44,11 @@ def clean_text(text):
     return text
 
 # =============================
-# 🔥 EXTRACTOR BARU (LEBIH TAJAM)
+# EXTRACT INTI
 # =============================
 def extract_inti(text):
     text = text.lower()
 
-    # hapus kalimat pembuka
     noise = [
         "dengan ini", "saya", "mengajukan", "permohonan",
         "untuk", "melakukan", "dalam rangka",
@@ -63,40 +59,51 @@ def extract_inti(text):
         text = text.replace(n, "")
 
     words = text.split()
-
-    # ambil kata paling akhir (biasanya inti)
     if len(words) > 3:
         words = words[-3:]
 
     return " ".join(words)
 
 # =============================
-# 🔥 BOOST KATA PENTING (GENERIK)
+# 🔥 FUNCTION DETECTOR (KUNCI)
 # =============================
-def boost_query(text):
-    boost = []
-
-    if "pindah" in text:
-        boost.append("pegawai mutasi")
-
-    if "cuti" in text:
-        boost.append("pegawai cuti")
-
-    if "arsip" in text:
-        boost.append("kearsipan arsip")
-
-    return text + " " + " ".join(boost)
-
-# =============================
-# PILIH KOLOM
-# =============================
-def get_search_column(dataframe):
-    if "ai_context_final" in dataframe.columns:
-        return dataframe["ai_context_final"]
-    elif "ai_search_context" in dataframe.columns:
-        return dataframe["ai_search_context"]
+def detect_function(text):
+    if "pindah" in text or "mutasi" in text:
+        return "mutasi pegawai"
+    elif "cuti" in text:
+        return "cuti pegawai"
+    elif "pensiun" in text:
+        return "pensiun pegawai"
+    elif "arsip" in text:
+        return "kearsipan arsip"
     else:
-        return dataframe["uraian"]
+        return ""
+
+# =============================
+# BUILD QUERY
+# =============================
+def build_query(inti):
+    fungsi = detect_function(inti)
+
+    query = inti
+
+    if "berkas" in query:
+        query = query.replace("berkas", "")
+
+    query = query + " " + fungsi
+
+    return clean_text(query)
+
+# =============================
+# SEARCH TEXT
+# =============================
+def get_search_column(df):
+    if "ai_context_final" in df.columns:
+        return df["ai_context_final"]
+    elif "ai_search_context" in df.columns:
+        return df["ai_search_context"]
+    else:
+        return df["uraian"]
 
 df["search_text"] = get_search_column(df).apply(clean_text)
 
@@ -107,7 +114,45 @@ df["search_text"] = get_search_column(df).apply(clean_text)
 def load_model():
     return SentenceTransformer('all-MiniLM-L6-v2')
 
-model_embed = load_model()
+model = load_model()
+
+# =============================
+# HYBRID SCORE
+# =============================
+def calculate_score(query, text, semantic_score):
+    keyword_score = 0
+    domain_score = 0
+
+    for word in query.split():
+        if word in text:
+            keyword_score += 1
+
+    keyword_score = keyword_score / (len(query.split()) + 1)
+
+    if "pegawai" in query and "pegawai" in text:
+        domain_score += 1
+
+    return (semantic_score * 0.6) + (keyword_score * 0.25) + (domain_score * 0.15)
+
+# =============================
+# GEMINI API
+# =============================
+def call_gemini(prompt, api_key):
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+
+    headers = {"Content-Type": "application/json"}
+
+    data = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+
+    res = requests.post(url, headers=headers, json=data)
+
+    if res.status_code != 200:
+        return f"❌ Error API: {res.text}"
+
+    result = res.json()
+    return result["candidates"][0]["content"]["parts"][0]["text"]
 
 # =============================
 # INPUT
@@ -120,84 +165,68 @@ if st.button("Analisis"):
         st.warning("Isi dulu")
         st.stop()
 
-    # =============================
-    # EXTRACT INTI
-    # =============================
     inti = extract_inti(perihal)
-    final_query = boost_query(inti)
-    final_query = clean_text(final_query)
+    fungsi = detect_function(inti)
+    query = build_query(inti)
 
     st.info(f"🧠 Inti: {inti}")
-    st.info(f"🚀 Query akhir: {final_query}")
+    st.info(f"🎯 Fungsi: {fungsi}")
+    st.info(f"🚀 Query: {query}")
 
-    # =============================
-    # EMBEDDING
-    # =============================
-    texts = df["search_text"].astype(str).tolist()
-    embeddings = model_embed.encode(texts, show_progress_bar=False)
+    texts = df["search_text"].tolist()
+    embeddings = model.encode(texts, show_progress_bar=False)
 
-    input_vec = model_embed.encode([final_query])
-    sim = cosine_similarity(input_vec, embeddings)
+    input_vec = model.encode([query])
+    sim = cosine_similarity(input_vec, embeddings)[0]
 
-    top_pos = sim[0].argsort()[-5:][::-1]
-    hasil = df.iloc[top_pos]
+    scores = []
 
-    # =============================
-    # TAMPILKAN
-    # =============================
+    for i, row in df.iterrows():
+        text = row["search_text"]
+        final_score = calculate_score(query, text, sim[i])
+        scores.append(final_score)
+
+    df["final_score"] = scores
+    df_sorted = df.sort_values(by="final_score", ascending=False).head(5)
+
     st.subheader("📊 Rekomendasi Awal")
 
     kandidat_list = []
 
-    for pos in top_pos:
-        row = df.iloc[pos]
-
-        kode = row.get("kode", "-")
-        uraian = row.get("uraian", "-")
-        skor = sim[0][pos]
-
-        teks = f"{kode} - {uraian}"
+    for _, row in df_sorted.iterrows():
+        teks = f"{row['kode']} - {row['uraian']}"
         kandidat_list.append(teks)
 
         st.write(f"**{teks}**")
-        st.caption(f"Similarity: {skor:.3f}")
+        st.caption(f"Score: {row['final_score']:.3f}")
 
     # =============================
-    # AI (FIX TOTAL)
+    # GEMINI (TETAP ADA)
     # =============================
-    model_ai = genai.GenerativeModel("gemini-pro")
-
     with st.spinner("🤖 AI menganalisis..."):
-        try:
-            prompt = f"""
-Anda adalah Arsiparis Ahli.
 
-Inti:
-{inti}
+        prompt = f"""
+Anda arsiparis ahli.
+
+Fungsi kegiatan:
+{fungsi}
 
 Kandidat:
 {chr(10).join(kandidat_list)}
 
-Pilih 1 yang paling tepat berdasarkan:
-- fungsi kegiatan
-- objek arsip
-
-Jawaban:
+Pilih 1 paling tepat.
 
 KODE:
 ...
 
 ALASAN:
-jelaskan logis dan spesifik
+jelaskan berbasis fungsi
 """
 
-            res = model_ai.generate_content(prompt)
+        hasil_ai = call_gemini(prompt, st.secrets["GEMINI_API_KEY"])
 
-            st.subheader("🎯 Hasil AI")
-            st.write(res.text)
-
-        except Exception as e:
-            st.error(f"AI Error: {e}")
+        st.subheader("🎯 Hasil AI")
+        st.write(hasil_ai)
 
 st.divider()
-st.caption("Versi Stabil + Extractor Lebih Tajam + Gemini Fix")
+st.caption("Versi Next Level (Function-Based)")
