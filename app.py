@@ -61,7 +61,7 @@ FUNGSI:
 # =============================
 @st.cache_data
 def load_data():
-    return pd.read_csv("klasifikasi_arsip.csv")
+    return pd.read_csv("klasifikasi_arsip_upgraded.csv")
 
 df = load_data()
 
