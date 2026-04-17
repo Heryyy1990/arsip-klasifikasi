@@ -12,8 +12,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
 
-st.title("📂 Penentu Klasifikasi Arsip (Berbasis Inti Kegiatan)")
-st.caption("Smart System: Ekstraksi Inti + Embedding + AI")
+st.title("📂 Penentu Klasifikasi Arsip (Generik)")
+st.caption("Berbasis Inti Kegiatan + Embedding + AI")
 
 # =============================
 # API KEY
@@ -45,15 +45,15 @@ def clean_text(text):
     return text
 
 # =============================
-# EKSTRAK INTI KEGIATAN (KUNCI UTAMA)
+# EKSTRAK INTI KEGIATAN (GENERIK)
 # =============================
 def extract_inti(text):
     text = text.lower()
 
-    # kata-kata yang harus diabaikan
     noise = [
         "berita acara", "surat", "dokumen", "laporan",
-        "permohonan", "undangan", "nota dinas"
+        "permohonan", "undangan", "nota dinas",
+        "hasil", "tentang", "perihal"
     ]
 
     for n in noise:
@@ -86,21 +86,6 @@ def load_model():
 model_embed = load_model()
 
 # =============================
-# DETEKSI KODE
-# =============================
-def detect_kode(perihal):
-    p = perihal.lower()
-
-    if any(k in p for k in ["pegawai", "cuti", "asn"]):
-        return "800"
-    elif any(k in p for k in ["keuangan", "anggaran", "spj"]):
-        return "900"
-    elif any(k in p for k in ["arsip", "pemusnahan", "penyusutan"]):
-        return "200"
-    else:
-        return None
-
-# =============================
 # INPUT
 # =============================
 perihal = st.text_area("✍️ Masukkan uraian surat")
@@ -120,43 +105,26 @@ if st.button("Analisis"):
     st.info(f"🧠 Inti terdeteksi: {inti}")
 
     # =============================
-    # FILTER KODE
+    # EMBEDDING KE SEMUA DATA
     # =============================
-    kode_filter = detect_kode(inti)
-
-    if kode_filter:
-        df_filtered = df[df["kode"].astype(str).str.startswith(kode_filter)].reset_index(drop=True)
-        st.info(f"🔎 Difilter ke kode {kode_filter}")
-    else:
-        df_filtered = df.reset_index(drop=True)
-        st.warning("⚠️ Tidak terdeteksi kode")
-
-    if df_filtered.empty:
-        st.error("❌ Data kosong setelah filter")
-        st.stop()
-
-    # =============================
-    # EMBEDDING
-    # =============================
-    texts = df_filtered["search_text"].astype(str).tolist()
+    texts = df["search_text"].astype(str).tolist()
     embeddings = model_embed.encode(texts, show_progress_bar=False)
 
     input_vec = model_embed.encode([inti])
     sim = cosine_similarity(input_vec, embeddings)
 
-    top_pos = sim[0].argsort()[-3:][::-1]
-
-    hasil = df_filtered.iloc[top_pos]
+    top_pos = sim[0].argsort()[-5:][::-1]
+    hasil = df.iloc[top_pos]
 
     # =============================
-    # TAMPILKAN
+    # TAMPILKAN HASIL
     # =============================
     st.subheader("📊 Rekomendasi Awal")
 
     kandidat_list = []
 
     for pos in top_pos:
-        row = df_filtered.iloc[pos]
+        row = df.iloc[pos]
 
         kode = row.get("kode", "-")
         uraian = row.get("uraian", "-")
@@ -169,7 +137,7 @@ if st.button("Analisis"):
         st.caption(f"Similarity: {skor:.3f}")
 
     # =============================
-    # AI ANALISIS
+    # AI ANALISIS (WAJIB LOGIS)
     # =============================
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model_ai = genai.GenerativeModel('gemini-1.5-flash')
@@ -182,18 +150,22 @@ Anda adalah Arsiparis Ahli.
 Inti perihal:
 {inti}
 
-Kandidat:
+Kandidat klasifikasi:
 {chr(10).join(kandidat_list)}
 
 Tugas:
 1. Analisis tiap kandidat berdasarkan kegiatan arsip
 2. Bandingkan fokusnya
-3. Pilih yang paling sesuai dengan inti kegiatan
+3. Pilih 1 paling tepat
 
-Gunakan:
+Gunakan logika:
 - fungsi kegiatan
 - objek arsip
-- konteks kearsipan
+- konteks administrasi
+
+JANGAN:
+- menjawab umum
+- hanya berdasarkan kemiripan kata
 
 Format:
 
@@ -201,6 +173,8 @@ ANALISIS:
 1. ...
 2. ...
 3. ...
+4. ...
+5. ...
 
 PERBANDINGAN:
 ...
@@ -209,7 +183,7 @@ REKOMENDASI:
 KODE
 
 ALASAN:
-jelaskan secara spesifik dan logis
+jelaskan paling logis dan spesifik
 """
 
             res = model_ai.generate_content(prompt)
@@ -221,4 +195,4 @@ jelaskan secara spesifik dan logis
             st.error(f"AI Error: {e}")
 
 st.divider()
-st.caption("Versi dengan Pemahaman Inti Kegiatan (Core Logic)")
+st.caption("Versi Generik (Tanpa Rule Manual, Full Semantic)")
