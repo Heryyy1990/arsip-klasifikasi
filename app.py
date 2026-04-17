@@ -3,7 +3,6 @@ import pandas as pd
 import re
 
 import google.generativeai as genai
-
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -11,35 +10,67 @@ from sklearn.metrics.pairwise import cosine_similarity
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-st.title("📂 Penentu Klasifikasi Arsip (Fix 404)")
-st.caption("AI stabil + tidak error model")
+st.title("📂 Penentu Klasifikasi Arsip (Hybrid Stabil)")
+st.caption("AI memahami isi → Lokal menentukan kode")
 
 # =============================
-# API CONFIG (RESMI)
+# API CONFIG
 # =============================
 if "GEMINI_API_KEY" not in st.secrets:
-    st.error("API Key tidak ditemukan")
+    st.error("❌ API Key tidak ditemukan di Secrets")
     st.stop()
 
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# 🔥 MODEL PALING AMAN
-model = genai.GenerativeModel("gemini-1.5-flash")
+# =============================
+# AUTO MODEL (ANTI 404)
+# =============================
+@st.cache_resource
+def load_gemini_model():
+    candidate_models = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
+
+    for m in candidate_models:
+        try:
+            model = genai.GenerativeModel(m)
+            model.generate_content("test")
+            return model, m
+        except:
+            continue
+
+    return None, None
+
+model, model_name = load_gemini_model()
+
+if model is None:
+    st.error("❌ Semua model Gemini gagal. Pastikan API sudah enable.")
+    st.stop()
+else:
+    st.success(f"✅ Model aktif: {model_name}")
 
 # =============================
-# AI FUNCTION (ARSIPARIS LOGIC)
+# AI ANALISIS (LOGIKA ARSIPARIS)
 # =============================
 def analyze_with_ai(perihal):
     prompt = f"""
 Anda adalah ARSIPARIS AHLI.
 
-Gunakan langkah berpikir:
+Gunakan cara berpikir berikut:
 
 1. Tentukan jenis dokumen
-2. Tentukan aksi utama
-3. Tentukan objek
+2. Tentukan aksi utama (kata kerja)
+3. Tentukan objek yang diproses
 4. Tentukan inti (maks 5 kata)
-5. Tentukan fungsi spesifik (jangan umum)
+5. Tentukan fungsi spesifik (contoh: administrasi rapat, mutasi pegawai, pengelolaan arsip)
+
+ATURAN:
+- Jangan terlalu umum
+- Fokus pada kegiatan utama
+- Jangan hanya ambil kata terakhir
 
 PERIHAL:
 {perihal}
@@ -52,7 +83,6 @@ OBJEK:
 INTI:
 FUNGSI:
 """
-
     try:
         response = model.generate_content(prompt)
         return response.text
@@ -64,7 +94,7 @@ FUNGSI:
 # =============================
 @st.cache_data
 def load_data():
-    return pd.read_csv("klasifikasi_arsip_upgraded.csv")
+    return pd.read_csv("klasifikasi_arsip.csv")
 
 df = load_data()
 
@@ -77,10 +107,10 @@ df["search"] = df["uraian"].apply(clean)
 # EMBEDDING
 # =============================
 @st.cache_resource
-def load_model():
+def load_embed():
     return SentenceTransformer('all-MiniLM-L6-v2')
 
-embed_model = load_model()
+embed_model = load_embed()
 
 # =============================
 # INPUT
@@ -90,7 +120,7 @@ perihal = st.text_area("✍️ Masukkan uraian surat")
 if st.button("Analisis"):
 
     if not perihal:
-        st.warning("Isi dulu")
+        st.warning("Mohon isi uraian terlebih dahulu")
         st.stop()
 
     # =============================
@@ -107,7 +137,7 @@ if st.button("Analisis"):
     st.write(hasil)
 
     # =============================
-    # PARSE
+    # PARSING
     # =============================
     inti = ""
     fungsi = ""
@@ -124,18 +154,18 @@ if st.button("Analisis"):
     # LOCAL MATCHING
     # =============================
     texts = df["search"].tolist()
-    emb = embed_model.encode(texts, show_progress_bar=False)
+    embeddings = embed_model.encode(texts, show_progress_bar=False)
 
-    sim = cosine_similarity(embed_model.encode([query]), emb)[0]
+    sim = cosine_similarity(embed_model.encode([query]), embeddings)[0]
 
     df["score"] = sim
     top = df.sort_values(by="score", ascending=False).head(5)
 
-    st.subheader("📊 Rekomendasi Kode")
+    st.subheader("📊 Rekomendasi Kode Klasifikasi")
 
     for _, r in top.iterrows():
         st.write(f"**{r['kode']} - {r['uraian']}**")
         st.caption(f"Score: {r['score']:.3f}")
 
 st.divider()
-st.caption("Versi Stabil Tanpa Error 404")
+st.caption("Versi Stabil Hybrid (AI + Local)")
