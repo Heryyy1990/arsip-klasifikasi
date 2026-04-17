@@ -7,38 +7,15 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # =============================
-# KONFIGURASI HALAMAN
+# SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
 
-st.title("📂 Penentu Klasifikasi Arsip (Embedding + AI)")
-st.caption("Dinas Perpustakaan dan Kearsipan Kabupaten Muna Barat")
+st.title("📂 Penentu Klasifikasi Arsip (Smart System)")
 
-# =============================
-# CEK API KEY
-# =============================
+# API KEY
 if "GEMINI_API_KEY" not in st.secrets:
-    st.error("❌ API Key tidak ditemukan!")
-    st.stop()
-
-# =============================
-# CEK FILE CSV
-# =============================
-file_optimized = 'klasifikasi_arsip_optimized.csv'
-file_upgraded = 'klasifikasi_arsip_upgraded.csv'
-file_asli = 'klasifikasi_arsip.csv'
-
-if os.path.exists(file_optimized):
-    csv_file = file_optimized
-    st.success(f"✅ Menggunakan database terbaik: {file_optimized}")
-elif os.path.exists(file_upgraded):
-    csv_file = file_upgraded
-    st.info(f"ℹ️ Menggunakan database upgraded")
-elif os.path.exists(file_asli):
-    csv_file = file_asli
-    st.warning(f"⚠️ Menggunakan database dasar")
-else:
-    st.error("❌ File CSV tidak ditemukan!")
+    st.error("API Key tidak ditemukan!")
     st.stop()
 
 # =============================
@@ -46,135 +23,101 @@ else:
 # =============================
 @st.cache_data
 def load_data():
-    return pd.read_csv(csv_file)
+    return pd.read_csv("klasifikasi_arsip_optimized.csv")
 
 df = load_data()
 
 # =============================
-# LOAD EMBEDDING MODEL
+# EMBEDDING
 # =============================
 @st.cache_resource
-def load_embedding():
+def load_model():
     return SentenceTransformer('all-MiniLM-L6-v2')
 
-embed_model = load_embedding()
+model_embed = load_model()
 
-# =============================
-# PREPARE EMBEDDING DATABASE
-# =============================
 @st.cache_resource
-def prepare_embeddings(dataframe):
-    kolom = 'ai_context_final' if 'ai_context_final' in dataframe.columns else 'uraian'
-    texts = dataframe[kolom].astype(str).tolist()
-    embeddings = embed_model.encode(texts, show_progress_bar=False)
-    return embeddings, kolom
-
-embeddings_db, search_col = prepare_embeddings(df)
+def encode_data(data):
+    return model_embed.encode(data.tolist())
 
 # =============================
-# GEMINI SETUP
+# DETEKSI TOPIK (KUNCI PERBAIKAN)
 # =============================
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model_ai = genai.GenerativeModel('gemini-1.5-flash')
+def detect_kode(perihal):
+    p = perihal.lower()
+
+    if "pegawai" in p or "cuti" in p:
+        return "800"
+    elif "keuangan" in p or "anggaran" in p:
+        return "900"
+    elif "rapat" in p or "undangan" in p:
+        return "000"
+    else:
+        return None
 
 # =============================
-# INPUT USER
+# INPUT
 # =============================
-perihal = st.text_area(
-    "✍️ Masukkan Perihal/Uraian Surat:",
-    placeholder="Contoh: Permohonan cuti tahunan pegawai...",
-    height=150
-)
+perihal = st.text_area("Masukkan uraian surat")
 
-# =============================
-# PROSES
-# =============================
-if st.button("Mulai Analisis"):
+if st.button("Analisis"):
 
     if not perihal:
-        st.warning("Mohon isi deskripsi surat dulu.")
+        st.warning("Isi dulu")
+        st.stop()
+
+    # =============================
+    # FILTER BERDASARKAN KODE
+    # =============================
+    kode_filter = detect_kode(perihal)
+
+    if kode_filter:
+        df_filtered = df[df["kode"].astype(str).str.startswith(kode_filter)]
+        st.info(f"🔎 Difilter ke kode {kode_filter}")
     else:
+        df_filtered = df
+        st.warning("⚠️ Tidak terdeteksi kode, gunakan semua data")
 
-        with st.spinner("🔍 Mencari dengan Embedding..."):
+    # =============================
+    # EMBEDDING DI DATA FILTERED
+    # =============================
+    texts = df_filtered["ai_context_final"].astype(str)
+    embeddings = encode_data(texts)
 
-            input_embedding = embed_model.encode([perihal])
-            similarity = cosine_similarity(input_embedding, embeddings_db)
+    input_vec = model_embed.encode([perihal])
+    sim = cosine_similarity(input_vec, embeddings)
 
-            top_idx = similarity[0].argsort()[-3:][::-1]
-            hasil = df.iloc[top_idx]
+    top_idx = sim[0].argsort()[-3:][::-1]
+    hasil = df_filtered.iloc[top_idx]
 
-        # =============================
-        # HASIL EMBEDDING
-        # =============================
-        st.subheader("📊 Rekomendasi Awal (Embedding)")
+    st.subheader("Hasil Awal")
 
-        kandidat_list = []
+    kandidat_list = []
+    for i, row in hasil.iterrows():
+        teks = f"{row['kode']} - {row['uraian']}"
+        kandidat_list.append(teks)
+        st.write(teks)
 
-        for i, row in hasil.iterrows():
-            kode = row.get("kode", "Tidak ada kode")
-            uraian = row.get("uraian", "Tidak ada uraian")
-            skor = similarity[0][i]
+    # =============================
+    # AI
+    # =============================
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    model_ai = genai.GenerativeModel('gemini-1.5-flash')
 
-            kandidat_list.append(f"{kode} - {uraian}")
+    prompt = f"""
+Anda arsiparis.
 
-            st.write(f"**{kode} - {uraian}**")
-            st.caption(f"Similarity: {skor:.3f}")
-
-        # =============================
-        # AI ANALISIS (VERSI DIPERKUAT)
-        # =============================
-        with st.spinner("🤖 AI sedang menganalisis..."):
-            try:
-                prompt = f"""
-Anda adalah Arsiparis Ahli di lingkungan pemerintah daerah.
-
-Diberikan 3 kandidat klasifikasi arsip:
+Pilih 1 terbaik dari:
 {chr(10).join(kandidat_list)}
 
-Perihal surat:
-{perihal}
+Perihal: {perihal}
 
-Lakukan analisis sebagai berikut:
-
-1. Jelaskan relevansi masing-masing kandidat terhadap perihal
-2. Bandingkan perbedaan fokus antar kandidat
-3. Tentukan 1 kode klasifikasi yang PALING TEPAT
-
-Gunakan pendekatan:
+Jelaskan alasan berdasarkan:
 - fungsi kegiatan
 - objek arsip
-- konteks administrasi
-
-Hindari jawaban umum.
-
-Format:
-
-ANALISIS KANDIDAT:
-
-1. KODE - PENJELASAN SPESIFIK
-2. KODE - PENJELASAN SPESIFIK
-3. KODE - PENJELASAN SPESIFIK
-
-PERBANDINGAN:
-Jelaskan perbedaan fokus masing-masing kandidat
-
-REKOMENDASI UTAMA:
-KODE TERPILIH
-
-ALASAN:
-Jelaskan secara logis:
-- kegiatan apa
-- objek apa
-- kenapa paling tepat dibanding lainnya
 """
 
-                response = model_ai.generate_content(prompt)
+    res = model_ai.generate_content(prompt)
 
-                st.subheader("🎯 Analisis AI (Final)")
-                st.markdown(response.text)
-
-            except Exception as e:
-                st.error(f"AI Error: {e}")
-
-st.divider()
-st.caption("Sistem Hybrid: Embedding + AI Reasoning")
+    st.subheader("Rekomendasi AI")
+    st.write(res.text)
