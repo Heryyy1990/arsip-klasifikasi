@@ -8,8 +8,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-st.title("📂 Penentu Klasifikasi Arsip (Local Intelligence PRO)")
-st.caption("Rule + NLP + Semantic")
+st.title("📂 Penentu Klasifikasi Arsip (FINAL ENGINE)")
+st.caption("Multi Scoring: Semantic + Keyword + Domain")
 
 # =============================
 # LOAD DATA
@@ -20,26 +20,25 @@ def load_data():
 
 df = load_data()
 
-# =============================
-# TEXT CLEANING
-# =============================
 def clean(text):
-    text = str(text).lower()
-    text = re.sub(r'[^a-z0-9\s]', ' ', text)
-    return text
+    return re.sub(r'[^a-z0-9\s]', '', str(text).lower())
 
+df["search"] = df["uraian"].apply(clean)
+
+# =============================
+# STOPWORDS
+# =============================
 STOPWORDS = [
-    "yang","dan","dengan","tentang","untuk","dari","ini","tahun",
-    "kepada","sehubungan","dalam","berdasarkan"
+    "yang","dan","dengan","tentang","untuk","dari","ini",
+    "tahun","kepada","sehubungan","dalam"
 ]
 
 def preprocess(text):
     words = clean(text).split()
-    words = [w for w in words if w not in STOPWORDS]
-    return words
+    return [w for w in words if w not in STOPWORDS]
 
 # =============================
-# NORMALISASI DOMAIN
+# NORMALISASI
 # =============================
 SYNONYM = {
     "pindah": "mutasi",
@@ -52,65 +51,37 @@ def normalize(words):
     return [SYNONYM.get(w, w) for w in words]
 
 # =============================
-# EKSTRAK INTI (SMART)
+# EKSTRAK INTI
 # =============================
 def extract_intent(text):
-    words = preprocess(text)
-    words = normalize(words)
-
-    teks = " ".join(words)
-
-    aksi = ""
-    objek = ""
-
-    # DETEKSI AKSI
-    if "pengajuan" in teks:
-        aksi = "pengajuan"
-    elif "undangan" in teks:
-        aksi = "undangan"
-    elif "laporan" in teks:
-        aksi = "pelaporan"
-    elif "pemusnahan" in teks:
-        aksi = "pemusnahan"
-    elif "rapat" in teks:
-        aksi = "rapat"
-
-    # DETEKSI OBJEK
-    if "pegawai" in teks or "mutasi" in teks:
-        objek = "pegawai"
-    elif "arsip" in teks:
-        objek = "arsip"
-    elif "anggaran" in teks:
-        objek = "anggaran"
-    elif "cuti" in teks:
-        objek = "cuti"
-
-    inti = f"{aksi} {objek}".strip()
-
-    if not inti:
-        inti = teks
-
-    return inti
+    words = normalize(preprocess(text))
+    return " ".join(words)
 
 # =============================
-# BOOST DOMAIN
+# DOMAIN DETECTION
 # =============================
-def boost_score(row, query):
-    score = row["score"]
+def predict_domain(query):
+    if any(k in query for k in ["pegawai","mutasi","cuti","pensiun"]):
+        return "800"
+    if any(k in query for k in ["arsip","pemusnahan","retensi"]):
+        return "000"
+    if any(k in query for k in ["anggaran","keuangan","dana"]):
+        return "900"
+    if "rapat" in query:
+        return "000"
+    return None
 
-    # kepegawaian
-    if "pegawai" in query and str(row["kode"]).startswith("800"):
-        score += 0.15
+# =============================
+# KEYWORD SCORE
+# =============================
+def keyword_score(query, text):
+    q_words = set(query.split())
+    t_words = set(text.split())
 
-    # arsip
-    if "arsip" in query and str(row["kode"]).startswith("000"):
-        score += 0.15
+    if not q_words:
+        return 0
 
-    # anggaran
-    if "anggaran" in query and str(row["kode"]).startswith("900"):
-        score += 0.15
-
-    return score
+    return len(q_words & t_words) / len(q_words)
 
 # =============================
 # EMBEDDING
@@ -120,8 +91,6 @@ def load_model():
     return SentenceTransformer('all-MiniLM-L6-v2')
 
 model = load_model()
-
-df["search"] = df["uraian"].apply(clean)
 
 # =============================
 # INPUT
@@ -135,32 +104,80 @@ if st.button("Analisis"):
         st.stop()
 
     # =============================
-    # EKSTRAK INTI
+    # INTI
     # =============================
     inti = extract_intent(perihal)
 
-    st.subheader("🧠 Inti Hasil Analisis")
+    st.subheader("🧠 Inti")
     st.write(inti)
 
     # =============================
-    # EMBEDDING MATCH
+    # DOMAIN
     # =============================
-    texts = df["search"].tolist()
-    emb = model.encode(texts, show_progress_bar=False)
+    domain = predict_domain(inti)
 
-    sim = cosine_similarity(model.encode([inti]), emb)[0]
-
-    df["score"] = sim
+    st.subheader("🎯 Domain")
+    st.write(domain if domain else "Semua")
 
     # =============================
-    # BOOSTING
+    # FILTER DATA
     # =============================
-    df["final_score"] = df.apply(lambda r: boost_score(r, inti), axis=1)
+    if domain:
+        df_filtered = df[df["kode"].astype(str).str.startswith(domain)].copy()
+    else:
+        df_filtered = df.copy()
 
-    top = df.sort_values(by="final_score", ascending=False).head(5)
+    # =============================
+    # SEMANTIC SCORE
+    # =============================
+    texts = df_filtered["search"].tolist()
+    embeddings = model.encode(texts, show_progress_bar=False)
+
+    semantic_scores = cosine_similarity(
+        model.encode([inti]), embeddings
+    )[0]
+
+    df_filtered["semantic"] = semantic_scores
+
+    # =============================
+    # KEYWORD SCORE
+    # =============================
+    df_filtered["keyword"] = df_filtered["search"].apply(
+        lambda x: keyword_score(inti, x)
+    )
+
+    # =============================
+    # DOMAIN BOOST
+    # =============================
+    def domain_boost(kode):
+        if not domain:
+            return 0
+        return 1 if str(kode).startswith(domain) else 0
+
+    df_filtered["domain_boost"] = df_filtered["kode"].apply(domain_boost)
+
+    # =============================
+    # FINAL SCORE
+    # =============================
+    df_filtered["final_score"] = (
+        df_filtered["semantic"] * 0.6 +
+        df_filtered["keyword"] * 0.25 +
+        df_filtered["domain_boost"] * 0.15
+    )
+
+    # =============================
+    # HASIL
+    # =============================
+    top = df_filtered.sort_values(by="final_score", ascending=False).head(5)
 
     st.subheader("📊 Rekomendasi Kode")
 
     for _, r in top.iterrows():
         st.write(f"**{r['kode']} - {r['uraian']}**")
-        st.caption(f"Score: {r['final_score']:.3f}")
+        st.caption(
+            f"Final: {r['final_score']:.3f} | "
+            f"S:{r['semantic']:.2f} K:{r['keyword']:.2f} D:{r['domain_boost']}"
+        )
+
+st.divider()
+st.caption("FINAL ENGINE - Multi Scoring System")
