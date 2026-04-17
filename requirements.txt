@@ -3,4 +3,3 @@ pandas
 scikit-learn
 sentence-transformers
 torch
-google-generativeai>=0.7.0
