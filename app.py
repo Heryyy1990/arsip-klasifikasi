@@ -9,8 +9,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-st.title("📂 Penentu Klasifikasi Arsip (Cross-Encoder PRO)")
-st.caption("Stage 1: Retrieval | Stage 2: Reranking")
+st.title("📂 Penentu Klasifikasi Arsip (ULTIMATE ENGINE)")
+st.caption("Hybrid AI: NLP + Multi Scoring + Cross Encoder")
 
 # =============================
 # LOAD DATA
@@ -37,12 +37,16 @@ def preprocess(text):
 
 SYNONYM = {
     "pindah": "mutasi",
-    "permohonan": "pengajuan"
+    "permohonan": "pengajuan",
+    "surat": ""
 }
 
 def normalize(words):
     return [SYNONYM.get(w, w) for w in words]
 
+# =============================
+# INTENT
+# =============================
 def extract_intent(text):
     words = normalize(preprocess(text))
     return " ".join(words)
@@ -51,13 +55,42 @@ def extract_intent(text):
 # DOMAIN
 # =============================
 def predict_domain(q):
-    if any(k in q for k in ["pegawai","mutasi","cuti"]):
+    if any(k in q for k in ["pegawai","mutasi","cuti","pensiun"]):
         return "800"
-    if "arsip" in q:
+    if any(k in q for k in ["arsip","pemusnahan","retensi"]):
         return "000"
-    if "anggaran" in q:
+    if any(k in q for k in ["anggaran","keuangan"]):
         return "900"
+    if "rapat" in q:
+        return "000"
     return None
+
+# =============================
+# QUERY EXPANSION
+# =============================
+EXPANSION = {
+    "mutasi": "mutasi pegawai kepegawaian pindah tugas",
+    "cuti": "cuti pegawai kepegawaian izin",
+    "arsip": "arsip retensi pemusnahan penyimpanan",
+    "rapat": "rapat undangan notulen koordinasi",
+    "anggaran": "anggaran keuangan dana kegiatan"
+}
+
+def expand_query(q):
+    for key in EXPANSION:
+        if key in q:
+            return q + " " + EXPANSION[key]
+    return q
+
+# =============================
+# KEYWORD SCORE
+# =============================
+def keyword_score(q, t):
+    q_set = set(q.split())
+    t_set = set(t.split())
+    if not q_set:
+        return 0
+    return len(q_set & t_set) / len(q_set)
 
 # =============================
 # MODELS
@@ -82,17 +115,24 @@ if st.button("Analisis"):
         st.stop()
 
     # =============================
-    # INTI
+    # INTI + EXPANSION
     # =============================
     inti = extract_intent(perihal)
+    query = expand_query(inti)
 
     st.subheader("🧠 Inti")
     st.write(inti)
 
+    st.subheader("🚀 Query Expansion")
+    st.write(query)
+
     # =============================
     # DOMAIN
     # =============================
-    domain = predict_domain(inti)
+    domain = predict_domain(query)
+
+    st.subheader("🎯 Domain")
+    st.write(domain if domain else "Semua")
 
     if domain:
         df_filtered = df[df["kode"].astype(str).str.startswith(domain)].copy()
@@ -100,35 +140,54 @@ if st.button("Analisis"):
         df_filtered = df.copy()
 
     # =============================
-    # STAGE 1 (RETRIEVAL)
+    # STAGE 1 (SEMANTIC)
     # =============================
     texts = df_filtered["search"].tolist()
     emb = embed_model.encode(texts, show_progress_bar=False)
 
-    sim = cosine_similarity(
-        embed_model.encode([inti]),
+    semantic_scores = cosine_similarity(
+        embed_model.encode([query]),
         emb
     )[0]
 
-    df_filtered["semantic"] = sim
+    df_filtered["semantic"] = semantic_scores
 
-    # ambil top 30 kandidat
+    # ambil kandidat
     candidates = df_filtered.sort_values(by="semantic", ascending=False).head(30).copy()
 
     # =============================
-    # STAGE 2 (CROSS-ENCODER)
+    # KEYWORD
     # =============================
-    pairs = [(inti, row["uraian"]) for _, row in candidates.iterrows()]
-    scores = cross_model.predict(pairs)
+    candidates["keyword"] = candidates["search"].apply(
+        lambda x: keyword_score(query, x)
+    )
 
-    candidates["cross_score"] = scores
+    # =============================
+    # DOMAIN BOOST
+    # =============================
+    def domain_boost(kode):
+        if not domain:
+            return 0
+        return 1 if str(kode).startswith(domain) else 0
+
+    candidates["domain_boost"] = candidates["kode"].apply(domain_boost)
+
+    # =============================
+    # CROSS ENCODER
+    # =============================
+    pairs = [(query, row["uraian"]) for _, row in candidates.iterrows()]
+    cross_scores = cross_model.predict(pairs)
+
+    candidates["cross"] = cross_scores
 
     # =============================
     # FINAL SCORE
     # =============================
     candidates["final_score"] = (
-        candidates["semantic"] * 0.4 +
-        candidates["cross_score"] * 0.6
+        candidates["semantic"] * 0.35 +
+        candidates["cross"] * 0.40 +
+        candidates["keyword"] * 0.15 +
+        candidates["domain_boost"] * 0.10
     )
 
     top = candidates.sort_values(by="final_score", ascending=False).head(5)
@@ -142,8 +201,9 @@ if st.button("Analisis"):
         st.write(f"**{r['kode']} - {r['uraian']}**")
         st.caption(
             f"Final: {r['final_score']:.3f} | "
-            f"S:{r['semantic']:.2f} CE:{r['cross_score']:.2f}"
+            f"S:{r['semantic']:.2f} CE:{r['cross']:.2f} "
+            f"K:{r['keyword']:.2f} D:{r['domain_boost']}"
         )
 
 st.divider()
-st.caption("Engine: Two-Stage Retrieval + Cross Encoder")
+st.caption("ULTIMATE ENGINE (Tanpa Feedback)")
