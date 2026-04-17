@@ -11,8 +11,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 # SETUP
 # =============================
 st.set_page_config(page_title="AI Arsip Muna Barat", layout="centered")
-st.title("📂 Penentu Klasifikasi Arsip (Level ANRI)")
-st.caption("Multi-Function + Hybrid Ranking + AI")
+st.title("📂 Penentu Klasifikasi Arsip (Generik Stabil)")
+st.caption("Pattern-Based Extractor + Hybrid Ranking + AI")
 
 # =============================
 # API KEY
@@ -38,7 +38,7 @@ def load_data():
 df = load_data()
 
 # =============================
-# CLEAN
+# CLEAN TEXT
 # =============================
 def clean_text(text):
     text = str(text).lower()
@@ -46,48 +46,66 @@ def clean_text(text):
     return text
 
 # =============================
-# EXTRACT INTI
+# 🔥 EXTRACTOR GENERIK (PATTERN BASED)
 # =============================
 def extract_inti(text):
     text = text.lower()
 
+    # 1. ambil setelah "tentang" jika ada
+    if "tentang" in text:
+        text = text.split("tentang", 1)[1]
+
+    # 2. hapus kata administratif umum
     noise = [
-        "dengan ini", "saya", "mengajukan", "permohonan",
-        "untuk", "melakukan", "dalam rangka",
-        "melengkapi", "persyaratan"
+        "dengan ini", "saya", "kami", "mengajukan",
+        "permohonan", "pelaksanaan", "kegiatan",
+        "untuk", "dalam rangka", "sehubungan dengan",
+        "berdasarkan", "maka", "adalah"
     ]
 
     for n in noise:
         text = text.replace(n, "")
 
-    words = text.split()
-    if len(words) > 3:
-        words = words[-3:]
+    # 3. hapus tahun & angka
+    text = re.sub(r'\b(19|20)\d{2}\b', '', text)
+    text = re.sub(r'\d+', '', text)
 
-    return " ".join(words)
+    # 4. hapus kata waktu
+    waktu = ["tahun", "tanggal", "bulan", "hari"]
+    for w in waktu:
+        text = text.replace(w, "")
+
+    words = text.split()
+
+    # 5. ambil kata penting (>=4 huruf)
+    important = [w for w in words if len(w) > 3]
+
+    # fallback kalau kosong
+    if not important:
+        important = words
+
+    return " ".join(important[:6])
 
 # =============================
-# 🔥 MULTI FUNCTION DETECTOR
+# 🔥 FUNCTION DETECTOR (UMUM)
 # =============================
 def detect_functions(text):
     fungsi = []
 
-    if "pindah" in text or "mutasi" in text:
-        fungsi.append("mutasi pegawai")
+    mapping = {
+        "cuti": "cuti pegawai",
+        "pindah": "mutasi pegawai",
+        "mutasi": "mutasi pegawai",
+        "pensiun": "pensiun pegawai",
+        "arsip": "kearsipan",
+        "libur": "hari libur nasional"
+    }
 
-    if "cuti" in text:
-        fungsi.append("cuti pegawai")
+    for k, v in mapping.items():
+        if k in text:
+            fungsi.append(v)
 
-    if "pensiun" in text:
-        fungsi.append("pensiun pegawai")
-
-    if "berkas" in text or "administrasi" in text:
-        fungsi.append("administrasi kepegawaian")
-
-    if "arsip" in text:
-        fungsi.append("kearsipan arsip")
-
-    return fungsi
+    return list(set(fungsi))
 
 # =============================
 # BUILD QUERY
@@ -95,6 +113,7 @@ def detect_functions(text):
 def build_query(inti, fungsi_list):
     query = inti
 
+    # kurangi bias kata umum
     if "berkas" in query:
         query = query.replace("berkas", "")
 
@@ -128,40 +147,29 @@ model = load_model()
 # =============================
 # HYBRID SCORE
 # =============================
-def calculate_score(query, text, semantic_score):
-    keyword_score = 0
-    domain_score = 0
+def calculate_score(query, text, semantic):
+    keyword = sum([1 for w in query.split() if w in text])
+    keyword = keyword / (len(query.split()) + 1)
 
-    for word in query.split():
-        if word in text:
-            keyword_score += 1
+    domain = 1 if ("pegawai" in query and "pegawai" in text) else 0
 
-    keyword_score = keyword_score / (len(query.split()) + 1)
-
-    if "pegawai" in query and "pegawai" in text:
-        domain_score += 1
-
-    return (semantic_score * 0.6) + (keyword_score * 0.25) + (domain_score * 0.15)
+    return (semantic * 0.6) + (keyword * 0.25) + (domain * 0.15)
 
 # =============================
-# 🔥 GEMINI FIX TOTAL
+# GEMINI FIX
 # =============================
 def call_gemini(prompt, api_key):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={api_key}"
 
     headers = {"Content-Type": "application/json"}
-
-    data = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
+    data = {"contents": [{"parts": [{"text": prompt}]}]}
 
     res = requests.post(url, headers=headers, json=data)
 
     if res.status_code != 200:
         return f"❌ Error API: {res.text}"
 
-    result = res.json()
-    return result["candidates"][0]["content"]["parts"][0]["text"]
+    return res.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 # =============================
 # INPUT
@@ -175,53 +183,42 @@ if st.button("Analisis"):
         st.stop()
 
     inti = extract_inti(perihal)
-    fungsi_list = detect_functions(inti)
-    query = build_query(inti, fungsi_list)
+    fungsi = detect_functions(inti)
+    query = build_query(inti, fungsi)
 
     st.info(f"🧠 Inti: {inti}")
-    st.info(f"🎯 Fungsi: {', '.join(fungsi_list)}")
+    st.info(f"🎯 Fungsi: {', '.join(fungsi)}")
     st.info(f"🚀 Query: {query}")
 
     texts = df["search_text"].tolist()
     embeddings = model.encode(texts, show_progress_bar=False)
 
-    input_vec = model.encode([query])
-    sim = cosine_similarity(input_vec, embeddings)[0]
+    sim = cosine_similarity(model.encode([query]), embeddings)[0]
 
-    scores = []
+    scores = [calculate_score(query, texts[i], sim[i]) for i in range(len(df))]
 
-    for i, row in df.iterrows():
-        text = row["search_text"]
-        final_score = calculate_score(query, text, sim[i])
-        scores.append(final_score)
-
-    df["final_score"] = scores
-    df_sorted = df.sort_values(by="final_score", ascending=False).head(5)
+    df["score"] = scores
+    top = df.sort_values(by="score", ascending=False).head(5)
 
     st.subheader("📊 Rekomendasi Awal")
 
-    kandidat_list = []
-
-    for _, row in df_sorted.iterrows():
-        teks = f"{row['kode']} - {row['uraian']}"
-        kandidat_list.append(teks)
-
+    kandidat = []
+    for _, r in top.iterrows():
+        teks = f"{r['kode']} - {r['uraian']}"
+        kandidat.append(teks)
         st.write(f"**{teks}**")
-        st.caption(f"Score: {row['final_score']:.3f}")
+        st.caption(f"Score: {r['score']:.3f}")
 
-    # =============================
-    # GEMINI
-    # =============================
+    # AI
     with st.spinner("🤖 AI menganalisis..."):
-
         prompt = f"""
 Anda arsiparis ahli.
 
 Fungsi:
-{', '.join(fungsi_list)}
+{', '.join(fungsi)}
 
 Kandidat:
-{chr(10).join(kandidat_list)}
+{chr(10).join(kandidat)}
 
 Pilih 1 paling tepat.
 
@@ -229,13 +226,10 @@ KODE:
 ...
 
 ALASAN:
-jelaskan berbasis fungsi arsip
+jelaskan logis
 """
-
-        hasil_ai = call_gemini(prompt, API_KEY)
-
         st.subheader("🎯 Hasil AI")
-        st.write(hasil_ai)
+        st.write(call_gemini(prompt, API_KEY))
 
 st.divider()
-st.caption("Versi Level ANRI - Multi Function + Gemini Fix")
+st.caption("Versi Generik Stabil - Tidak tergantung contoh")
